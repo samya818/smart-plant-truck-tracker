@@ -1,0 +1,43 @@
+# Environnement
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+.pytest_cache/
+.coverage
+
+# Node
+node_modules/
+dist/
+*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Données / Modèles lourds
+*.mp4
+*.avi
+*.pkl
+*.joblib
+*.h5
+*.onnx
+models/
+data/videos/
+uploads/                                # Photos agent mobile
+
+# Docker volumes
+docker-volumes/
+
+# Aider history
+.aider*
