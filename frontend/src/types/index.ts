@@ -61,3 +61,13 @@ export interface PosteConfig {
   seuil_attente_max: number;
   is_active: boolean;
 }
+
+export interface DureesMoyennes {
+  parking:      { moyenne: number; nb_cycles: number };
+  bascule_tare: { moyenne: number; nb_cycles: number };
+  ensachage:    { moyenne: number; nb_cycles: number };
+  bascule_brut: { moyenne: number; nb_cycles: number };
+  porte_sortie: { moyenne: number; nb_cycles: number };
+  nb_cycles_total: number;
+  source: string;
+}

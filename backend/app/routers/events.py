@@ -12,6 +12,7 @@ router = APIRouter(prefix="/api/events", tags=["Événements"])
 
 @router.get("/active", response_model=List[EventRead])
 def list_active_events(db: Session = Depends(get_db)):
-    """Retourne les événements récents des dernières 24 heures."""
-    since = datetime.utcnow() - timedelta(hours=24)
+    """Retourne les événements récents des dernières 48 heures."""
+    since = datetime.utcnow() - timedelta(hours=48)
     return db.query(Event).options(joinedload(Event.truck)).filter(Event.horodatage >= since).order_by(Event.horodatage.desc()).all()
+

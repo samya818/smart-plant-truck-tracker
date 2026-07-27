@@ -39,6 +39,43 @@ class CVService:
         # État de simulation : pour chaque plaque, index du poste actuel dans le cycle
         self.sim_state = {}
 
+    def _restore_state_from_db(self, db) -> None:
+        """
+        Restaure l'état de simulation depuis la DB au démarrage.
+        Pour chaque camion avec un cycle EN_COURS, on retrouve
+        le dernier événement pour continuer le cycle là où il s'était arrêté.
+        """
+        from app.models import Cycle, TruckStatus
+        cycles_en_cours = db.query(Cycle).filter(
+            Cycle.status == TruckStatus.EN_COURS
+        ).all()
+
+        for cycle in cycles_en_cours:
+            truck = db.query(Truck).get(cycle.truck_id)
+            if not truck or truck.immatriculation not in self.plaques:
+                continue
+
+            # Trouver le dernier événement de ce camion dans ce cycle
+            last_event = db.query(Event).filter(
+                Event.truck_id == cycle.truck_id,
+                Event.horodatage >= cycle.entree_porte
+            ).order_by(Event.horodatage.desc()).first()
+
+            if not last_event:
+                self.sim_state[truck.immatriculation] = {"index": 0}
+                continue
+
+            # Retrouver l'index correspondant au dernier événement dans postes_cycle
+            last_step = (last_event.poste, last_event.type_event)
+            idx = 0
+            for i, step in enumerate(self.postes_cycle):
+                if step[0] == last_event.poste and step[1] == last_event.type_event:
+                    idx = i
+            # Reprendre à l'étape suivante
+            next_idx = (idx + 1) % len(self.postes_cycle)
+            self.sim_state[truck.immatriculation] = {"index": next_idx}
+            print(f"[CV] Restauré {truck.immatriculation} → étape {next_idx}")
+
     async def run_simulation_loop(self):
         """
         Boucle de simulation en arrière-plan.
@@ -46,6 +83,13 @@ class CVService:
         en respectant la logique de cycle (pas de sortie sans entrée).
         """
         print("[CV] Mode simulation activé — génération d'événements...")
+
+        # Restaurer l'état depuis la DB au démarrage (évite les cycles orphelins)
+        db = SessionLocal()
+        try:
+            self._restore_state_from_db(db)
+        finally:
+            db.close()
 
         while True:
             await asyncio.sleep(random.randint(5, 15))
@@ -55,7 +99,7 @@ class CVService:
                 plaque = random.choice(self.plaques)
                 service = EventIngestionService(db)
 
-                # Initialiser l'état si nouveau camion
+                # Initialiser l'état si nouveau camion (pas encore en cycle)
                 if plaque not in self.sim_state:
                     self.sim_state[plaque] = {"index": 0}
 

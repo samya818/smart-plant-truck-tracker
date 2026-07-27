@@ -1,15 +1,435 @@
 """Router API pour les analyses historiques et prédictions."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import List
+from datetime import datetime, timedelta
+import statistics
 
 from app.database import get_db
-from app.models import Cycle
+from app.models import Cycle, Event, DelayCause, Truck, Transporteur, TruckStatus, PosteType
 from app.schemas import CycleRead
+from app.config import get_settings
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
+settings = get_settings()
+
 
 @router.get("/cycles", response_model=List[CycleRead])
 def list_cycles(db: Session = Depends(get_db)):
-    """Retourne l'historique des cycles de camions avec eager loading pour éviter le problème N+1."""
+    """Retourne l'historique des cycles de camions avec eager loading."""
     return db.query(Cycle).options(joinedload(Cycle.truck)).order_by(Cycle.entree_porte.desc()).limit(100).all()
+
+
+@router.get("/durees-moyennes")
+def get_durees_moyennes(db: Session = Depends(get_db)):
+    """Durées moyennes par étape (sur 30 jours)."""
+    depuis = datetime.utcnow() - timedelta(days=30)
+    cycles = db.query(Cycle).filter(
+        Cycle.status == TruckStatus.TERMINE,
+        Cycle.entree_porte >= depuis,
+        Cycle.duree_total > 0
+    ).all()
+
+    if not cycles:
+        return {
+            "parking":        {"moyenne": 15.0, "nb_cycles": 0},
+            "bascule_tare":   {"moyenne": 10.0, "nb_cycles": 0},
+            "ensachage":      {"moyenne": 45.0, "nb_cycles": 0},
+            "bascule_brut":   {"moyenne": 10.0, "nb_cycles": 0},
+            "porte_sortie":   {"moyenne": 5.0,  "nb_cycles": 0},
+            "nb_cycles_total": 0,
+            "source": "valeurs_par_defaut"
+        }
+
+    def avg(lst):
+        vals = [v for v in lst if v and v > 0]
+        return round(sum(vals) / len(vals), 1) if vals else 0.0
+
+    return {
+        "parking":        {"moyenne": avg([c.duree_parking for c in cycles]),      "nb_cycles": len(cycles)},
+        "bascule_tare":   {"moyenne": avg([c.duree_bascule_tare for c in cycles]), "nb_cycles": len(cycles)},
+        "ensachage":      {"moyenne": avg([c.duree_ensachage for c in cycles]),    "nb_cycles": len(cycles)},
+        "bascule_brut":   {"moyenne": avg([c.duree_bascule_brut for c in cycles]), "nb_cycles": len(cycles)},
+        "porte_sortie":   {"moyenne": 5.0,                                          "nb_cycles": len(cycles)},
+        "nb_cycles_total": len(cycles),
+        "source": "historique_30j"
+    }
+
+
+@router.get("/stats-retards-services")
+def get_stats_retards_services(db: Session = Depends(get_db)):
+    """
+    Statistiques ultra-détaillées des retards par service / zone :
+    - Décomposition sur les 5 étapes métier (Parking, Bascule Tare, Ensachage, Bascule Brut, Porte)
+    - Taux d'anomalies / retards (%) par zone
+    - Volume de camions traités
+    - Temps total perdu cumulé (heures/minutes)
+    - Recommandations d'action automatique par zone
+    """
+    depuis = datetime.utcnow() - timedelta(days=30)
+    cycles = db.query(Cycle).filter(
+        Cycle.status == TruckStatus.TERMINE,
+        Cycle.entree_porte >= depuis
+    ).all()
+
+    nb_total = len(cycles) or 1
+
+    def avg(lst):
+        vals = [v for v in lst if v and v > 0]
+        return round(sum(vals) / len(vals), 1) if vals else 0.0
+
+    def count_retards(lst, seuil):
+        return len([v for v in lst if v and v > seuil])
+
+    # Calculs par étape
+    avg_parking = avg([c.duree_parking for c in cycles]) or 15.0
+    retards_parking = count_retards([c.duree_parking for c in cycles], settings.seuil_attente_parking_max)
+
+    avg_b_tare = avg([c.duree_bascule_tare for c in cycles]) or 10.0
+    retards_b_tare = count_retards([c.duree_bascule_tare for c in cycles], settings.seuil_bascule_max)
+
+    avg_ensachage = avg([c.duree_ensachage for c in cycles]) or 45.0
+    retards_ensachage = count_retards([c.duree_ensachage for c in cycles], settings.seuil_ensachage_max)
+
+    avg_b_brut = avg([c.duree_bascule_brut for c in cycles]) or 10.0
+    retards_b_brut = count_retards([c.duree_bascule_brut for c in cycles], settings.seuil_bascule_max)
+
+    # Dépassements moyens
+    dep_parking = max(0.0, avg_parking - settings.seuil_attente_parking_max)
+    dep_b_tare = max(0.0, avg_b_tare - settings.seuil_bascule_max)
+    dep_ensachage = max(0.0, avg_ensachage - settings.seuil_ensachage_max)
+    dep_b_brut = max(0.0, avg_b_brut - settings.seuil_bascule_max)
+
+    total_depassement = dep_parking + dep_b_tare + dep_ensachage + dep_b_brut or 1.0
+
+    # Causes déclarées par poste
+    events_retard = db.query(
+        Event.poste,
+        DelayCause.nom,
+        func.count(Event.id).label("count"),
+        func.sum(Event.minutes_retard).label("total_minutes")
+    ).join(DelayCause, Event.delay_cause_id == DelayCause.id).filter(
+        Event.horodatage >= depuis
+    ).group_by(Event.poste, DelayCause.nom).all()
+
+    causes_par_poste = {}
+    for poste, cause_nom, count, total_mins in events_retard:
+        p_name = poste.value if hasattr(poste, "value") else str(poste)
+        if p_name not in causes_par_poste:
+            causes_par_poste[p_name] = []
+        causes_par_poste[p_name].append({
+            "cause": cause_nom,
+            "occurrences": count,
+            "total_minutes": total_mins or 0
+        })
+
+    zones = [
+        {
+            "key": "parking",
+            "etape": "Étape ②",
+            "nom": "Parking Usine",
+            "action": "Attente avant pesage",
+            "temps_moyen": avg_parking,
+            "seuil_max": settings.seuil_attente_parking_max,
+            "depassement": round(dep_parking, 1),
+            "taux_retard_pct": round((retards_parking / nb_total) * 100, 1),
+            "part_retard_global_pct": round((dep_parking / total_depassement) * 100, 1),
+            "temps_perdu_total_min": round(dep_parking * nb_total, 0),
+            "statut": "critique" if avg_parking > settings.seuil_attente_parking_max else "normal",
+            "recommandation": "Fluidifier le flux d'appel des camions au pont-bascule" if dep_parking > 0 else "Flux d'attente optimal",
+            "causes": causes_par_poste.get("parking", [])
+        },
+        {
+            "key": "bascule_tare",
+            "etape": "Étape ③ (1er passage)",
+            "nom": "Agence Logistique (Tare)",
+            "action": "Pesage à vide du camion",
+            "temps_moyen": avg_b_tare,
+            "seuil_max": settings.seuil_bascule_max,
+            "depassement": round(dep_b_tare, 1),
+            "taux_retard_pct": round((retards_b_tare / nb_total) * 100, 1),
+            "part_retard_global_pct": round((dep_b_tare / total_depassement) * 100, 1),
+            "temps_perdu_total_min": round(dep_b_tare * nb_total, 0),
+            "statut": "critique" if avg_b_tare > settings.seuil_bascule_max else "normal",
+            "recommandation": "Vérifier la rapidité de lecture OCR & validation des badges" if dep_b_tare > 0 else "Cadence de pesée conforme",
+            "causes": causes_par_poste.get("bascule", [])
+        },
+        {
+            "key": "ensachage",
+            "etape": "Étape ④",
+            "nom": "Expéditions / Ensachage",
+            "action": "Chargement des sacs de ciment",
+            "temps_moyen": avg_ensachage,
+            "seuil_max": settings.seuil_ensachage_max,
+            "depassement": round(dep_ensachage, 1),
+            "taux_retard_pct": round((retards_ensachage / nb_total) * 100, 1),
+            "part_retard_global_pct": round((dep_ensachage / total_depassement) * 100, 1),
+            "temps_perdu_total_min": round(dep_ensachage * nb_total, 0),
+            "statut": "critique" if avg_ensachage > settings.seuil_ensachage_max else "normal",
+            "recommandation": "Contrôler la disponibilité des lignes de palettisation/ensachage" if dep_ensachage > 0 else "Chargement fluide",
+            "causes": causes_par_poste.get("ensachage", [])
+        },
+        {
+            "key": "bascule_brut",
+            "etape": "Étape ③↩ (2ème passage)",
+            "nom": "Agence Logistique (Brut)",
+            "action": "Pesage camion plein & contrôle final",
+            "temps_moyen": avg_b_brut,
+            "seuil_max": settings.seuil_bascule_max,
+            "depassement": round(dep_b_brut, 1),
+            "taux_retard_pct": round((retards_b_brut / nb_total) * 100, 1),
+            "part_retard_global_pct": round((dep_b_brut / total_depassement) * 100, 1),
+            "temps_perdu_total_min": round(dep_b_brut * nb_total, 0),
+            "statut": "critique" if avg_b_brut > settings.seuil_bascule_max else "normal",
+            "recommandation": "Accélérer l'impression du bon de livraison et la sortie" if dep_b_brut > 0 else "Pesée retour conforme",
+            "causes": [c for c in causes_par_poste.get("bascule", []) if "brut" in c["cause"].lower() or "bon" in c["cause"].lower()]
+        }
+    ]
+
+    # Zone la plus pénalisante
+    zone_bloquante = max(zones, key=lambda z: z["depassement"])
+
+    return {
+        "zones": zones,
+        "nb_cycles_analyses": len(cycles),
+        "zone_la_plus_bloquante": zone_bloquante["nom"],
+        "total_temps_perdu_heures": round(sum(z["temps_perdu_total_min"] for z in zones) / 60, 1)
+    }
+
+
+@router.get("/rapport")
+def get_rapport(
+    periode: str = Query("aujourd_hui", enum=["aujourd_hui", "semaine", "mois"]),
+    db: Session = Depends(get_db)
+):
+    """
+    Rapport statistique complet pour la page Statistiques.
+    Accepte : aujourd_hui | semaine | mois
+    """
+    now = datetime.utcnow()
+
+    if periode == "aujourd_hui":
+        date_debut = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        periode_label = "Aujourd'hui"
+    elif periode == "semaine":
+        date_debut = now - timedelta(days=7)
+        periode_label = "7 derniers jours"
+    else:
+        date_debut = now - timedelta(days=30)
+        periode_label = "30 derniers jours"
+
+    date_fin = now
+
+    # ── Cycles ────────────────────────────────────────────────────────────
+    cycles_all = db.query(Cycle).filter(Cycle.entree_porte >= date_debut).all()
+    cycles_termines = [c for c in cycles_all if c.status == TruckStatus.TERMINE]
+    cycles_en_cours = [c for c in cycles_all if c.status == TruckStatus.EN_COURS]
+    cycles_anomalie = [c for c in cycles_all if c.est_anomalie]
+
+    nb_total = len(cycles_all)
+    nb_termines = len(cycles_termines)
+    nb_anomalie = len(cycles_anomalie)
+    taux_anomalie = round((nb_anomalie / nb_total * 100), 1) if nb_total > 0 else 0.0
+
+    # ── Temps de cycle ────────────────────────────────────────────────────
+    def safe_avg(lst):
+        vals = [v for v in lst if v and v > 0]
+        return round(sum(vals) / len(vals), 1) if vals else 0.0
+
+    def safe_median(lst):
+        vals = [v for v in lst if v and v > 0]
+        return round(statistics.median(vals), 1) if vals else 0.0
+
+    durees_total = [c.duree_total for c in cycles_termines if c.duree_total and c.duree_total > 0]
+    temps_moyen = safe_avg(durees_total)
+    temps_median = safe_median(durees_total)
+    temps_min = round(min(durees_total), 1) if durees_total else 0.0
+    temps_max = round(max(durees_total), 1) if durees_total else 0.0
+
+    # ── Durées par zone ───────────────────────────────────────────────────
+    seuils = {
+        "parking": settings.seuil_attente_parking_max,
+        "bascule_tare": settings.seuil_bascule_max,
+        "ensachage": settings.seuil_ensachage_max,
+        "bascule_brut": settings.seuil_bascule_max,
+    }
+    zone_labels = {
+        "parking": "Parking",
+        "bascule_tare": "Bascule Tare",
+        "ensachage": "Ensachage",
+        "bascule_brut": "Bascule Brut",
+    }
+    zone_getters = {
+        "parking": lambda c: c.duree_parking,
+        "bascule_tare": lambda c: c.duree_bascule_tare,
+        "ensachage": lambda c: c.duree_ensachage,
+        "bascule_brut": lambda c: c.duree_bascule_brut,
+    }
+
+    durees_par_zone = []
+    for key, label in zone_labels.items():
+        vals = [zone_getters[key](c) for c in cycles_termines]
+        moy = safe_avg(vals)
+        seuil = seuils[key]
+        dep = len([v for v in vals if v and v > seuil])
+        durees_par_zone.append({
+            "zone": label,
+            "key": key,
+            "moyenne": moy,
+            "seuil": seuil,
+            "depassements": dep
+        })
+
+    # ── Analyse statistique détaillée des causes de retard ────────────────
+    # Récupérer le total des minutes de retard pour le calcul des parts en %
+    total_minutes_retard_global = db.query(func.sum(Event.minutes_retard))\
+        .filter(Event.horodatage >= date_debut, Event.delay_cause_id != None).scalar() or 1
+
+    events_retard = db.query(
+        Event.poste,
+        DelayCause.nom,
+        func.count(Event.id).label("count"),
+        func.sum(Event.minutes_retard).label("total_minutes"),
+        DelayCause.id.label("cause_id")
+    ).join(DelayCause, Event.delay_cause_id == DelayCause.id).filter(
+        Event.horodatage >= date_debut,
+        Event.delay_cause_id != None
+    ).group_by(Event.poste, DelayCause.nom, DelayCause.id).all()
+
+    causes_detaillees = []
+    for poste, cause_nom, count, total_mins, cause_id in events_retard:
+        mins = int(total_mins or 0)
+        pct_du_retard = round((mins / total_minutes_retard_global) * 100, 1)
+
+        # Répartition de cette cause par transporteur
+        transporteurs_impactes = db.query(Transporteur.nom, func.count(Event.id).label("cnt"))\
+            .join(Truck, Truck.transporteur_id == Transporteur.id)\
+            .join(Event, Event.truck_id == Truck.id)\
+            .filter(Event.delay_cause_id == cause_id, Event.horodatage >= date_debut)\
+            .group_by(Transporteur.nom).all()
+
+        repartition_trans = [
+            {"transporteur": t_nom, "occurrences": t_count}
+            for t_nom, t_count in transporteurs_impactes
+        ]
+
+        causes_detaillees.append({
+            "cause": cause_nom,
+            "occurrences": count,
+            "total_minutes": mins,
+            "poste": poste.value if hasattr(poste, "value") else str(poste),
+            "pct_du_retard": pct_du_retard,
+            "repartition_transporteurs": sorted(repartition_trans, key=lambda x: x["occurrences"], reverse=True)
+        })
+    causes_detaillees = sorted(causes_detaillees, key=lambda x: x["total_minutes"], reverse=True)
+
+    # ── Répartition des sources ───────────────────────────────────────────
+    events_all = db.query(Event).filter(Event.horodatage >= date_debut).all()
+    repartition_source = {"camera": 0, "agent_mobile": 0, "hybrid": 0, "simulation": 0}
+    for ev in events_all:
+        src = (ev.source or "camera").lower()
+        if src in repartition_source:
+            repartition_source[src] += 1
+        elif src == "simulation":
+            repartition_source["simulation"] += 1
+        else:
+            repartition_source["camera"] += 1
+
+    # ── Évolution temporelle ──────────────────────────────────────────────
+    evolution = []
+    if periode == "aujourd_hui":
+        # Par heure 05h→23h
+        for h in range(5, 24):
+            heure_debut = date_debut.replace(hour=h, minute=0, second=0)
+            heure_fin = heure_debut + timedelta(hours=1)
+            count = len([c for c in cycles_all if c.entree_porte and
+                         heure_debut <= c.entree_porte.replace(tzinfo=None) < heure_fin])
+            evolution.append({"heure": f"{h:02d}:00", "nb_camions": count})
+
+    elif periode == "semaine":
+        # Par jour sur les 7 derniers jours
+        jours_fr = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+        for i in range(6, -1, -1):
+            jour = now - timedelta(days=i)
+            jour_debut = jour.replace(hour=0, minute=0, second=0, microsecond=0)
+            jour_fin = jour_debut + timedelta(days=1)
+            count = len([c for c in cycles_all if c.entree_porte and
+                         jour_debut <= c.entree_porte.replace(tzinfo=None) < jour_fin])
+            label = f"{jours_fr[jour.weekday()]} {jour.day:02d}"
+            evolution.append({"heure": label, "nb_camions": count})
+
+    else:
+        # Par semaine sur les 4 dernières semaines
+        for i in range(3, -1, -1):
+            sem_debut = now - timedelta(days=(i + 1) * 7)
+            sem_fin = now - timedelta(days=i * 7)
+            count = len([c for c in cycles_all if c.entree_porte and
+                         sem_debut <= c.entree_porte.replace(tzinfo=None) < sem_fin])
+            evolution.append({"heure": f"Sem {4 - i}", "nb_camions": count})
+
+    # ── Répartition globale du temps de retard par poste ──────────────────
+    retard_global_par_poste = {
+        "Parking": int(sum([max(0.0, c.duree_parking - settings.seuil_attente_parking_max) for c in cycles_termines])),
+        "Bascule Tare": int(sum([max(0.0, c.duree_bascule_tare - settings.seuil_bascule_max) for c in cycles_termines])),
+        "Ensachage": int(sum([max(0.0, c.duree_ensachage - settings.seuil_ensachage_max) for c in cycles_termines])),
+        "Bascule Brut": int(sum([max(0.0, c.duree_bascule_brut - settings.seuil_bascule_max) for c in cycles_termines])),
+    }
+
+    # ── Performance des transporteurs ─────────────────────────────────────
+    transporteurs = db.query(Transporteur).filter(Transporteur.est_actif == True).all()
+    perf_transporteurs = []
+    for t in transporteurs:
+        truck_ids = [tr.id for tr in t.trucks]
+        if not truck_ids:
+            continue
+        cycles_t = [c for c in cycles_termines if c.truck_id in truck_ids]
+        if not cycles_t:
+            continue
+        temps_moy_t = safe_avg([c.duree_total for c in cycles_t])
+        nb_anomalies_t = len([c for c in cycles_t if c.est_anomalie])
+        
+        # Minutes cumulées perdues (dépassements de l'objectif de 120 minutes)
+        retard_cumule_min = int(sum([max(0.0, c.duree_total - 120.0) for c in cycles_t if c.duree_total]))
+
+        # Recherche de la cause de retard la plus fréquente pour ce transporteur
+        events_t = db.query(DelayCause.nom, func.count(Event.id).label("cnt"))\
+            .join(Event, Event.delay_cause_id == DelayCause.id)\
+            .filter(Event.truck_id.in_(truck_ids), Event.horodatage >= date_debut)\
+            .group_by(DelayCause.nom)\
+            .order_by(func.count(Event.id).desc())\
+            .first()
+        cause_principale = events_t[0] if events_t else "Aucune déclarée"
+
+        taux_retard = round((nb_anomalies_t / len(cycles_t) * 100), 1) if cycles_t else 0.0
+        perf_transporteurs.append({
+            "transporteur": t.nom,
+            "nb_rotations": len(cycles_t),
+            "temps_moyen_min": temps_moy_t,
+            "taux_retard_pct": taux_retard,
+            "retard_cumule_min": retard_cumule_min,
+            "cause_principale": cause_principale
+        })
+
+    return {
+        "periode": periode,
+        "periode_label": periode_label,
+        "date_debut": date_debut.isoformat(),
+        "date_fin": date_fin.isoformat(),
+        "nb_cycles_total": nb_total,
+        "nb_cycles_termines": nb_termines,
+        "nb_cycles_en_cours": len(cycles_en_cours),
+        "nb_cycles_anomalie": nb_anomalie,
+        "taux_anomalie_pct": taux_anomalie,
+        "temps_moyen_cycle_min": temps_moyen,
+        "temps_median_cycle_min": temps_median,
+        "temps_min_cycle_min": temps_min,
+        "temps_max_cycle_min": temps_max,
+        "durees_par_zone": durees_par_zone,
+        "top_causes_retard": causes_detaillees,
+        "repartition_source": repartition_source,
+        "evolution_journaliere": evolution,
+        "performance_transporteurs": perf_transporteurs,
+        "retard_global_par_poste": retard_global_par_poste,
+    }
+

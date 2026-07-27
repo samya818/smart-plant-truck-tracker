@@ -1,10 +1,11 @@
 """Router API pour les statistiques du dashboard."""
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from sqlalchemy import func, and_, distinct
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_db
-from app.models import Cycle, Event, TruckStatus, DelayCause
+from app.models import Cycle, Event, TruckStatus, DelayCause, PosteType
 from app.schemas import DashboardStats
 from app.services.anomaly_detector import AnomalyDetector
 
@@ -12,32 +13,85 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
 @router.get("/stats", response_model=DashboardStats)
 def get_stats(db: Session = Depends(get_db)):
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    camions_en_cours = db.query(Cycle).filter(Cycle.status == TruckStatus.EN_COURS).count()
-    camions_aujourdhui = db.query(Cycle).filter(Cycle.entree_porte >= today).count()
-    
-    cycles_aujourdhui = db.query(Cycle).filter(
-        Cycle.entree_porte >= today, 
-        Cycle.status == TruckStatus.TERMINE
+    """
+    KPIs calculés depuis la table EVENTS (même source que le frontend).
+    Garantit la cohérence avec ce que l'utilisateur voit dans l'interface.
+    """
+    # Fuseau horaire Maroc (UTC+1)
+    tz_maroc = timezone(timedelta(hours=1))
+    now_maroc = datetime.now(tz=tz_maroc)
+    today_utc = now_maroc.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
+    depuis_24h = datetime.utcnow() - timedelta(hours=24)
+
+    # ── Camions en cours ──────────────────────────────────────────────────────
+    # Trucks ayant eu un événement dans les 24h ET sans événement porte_usine/sortie
+    trucks_24h = db.query(distinct(Event.truck_id)).filter(
+        Event.horodatage >= depuis_24h
+    ).subquery()
+
+    trucks_sortis = db.query(distinct(Event.truck_id)).filter(
+        Event.horodatage >= depuis_24h,
+        Event.poste == PosteType.PORTE_USINE,
+        Event.type_event == "sortie"
+    ).subquery()
+
+    camions_en_cours = db.query(func.count(distinct(Event.truck_id))).filter(
+        Event.horodatage >= depuis_24h,
+        ~Event.truck_id.in_(db.query(trucks_sortis))
+    ).scalar() or 0
+
+    # ── Aujourd'hui ───────────────────────────────────────────────────────────
+    # Nombre de trucks DISTINCTS ayant eu au moins un événement aujourd'hui
+    camions_aujourdhui = db.query(func.count(distinct(Event.truck_id))).filter(
+        Event.horodatage >= today_utc
+    ).scalar() or 0
+
+    # ── Temps moyen cycle ─────────────────────────────────────────────────────
+    # Depuis les cycles TERMINÉS récents (derniers 7 jours) avec duree_total > 0
+    sept_jours = datetime.utcnow() - timedelta(days=7)
+    cycles_termines = db.query(Cycle).filter(
+        Cycle.status == TruckStatus.TERMINE,
+        Cycle.entree_porte >= sept_jours,
+        Cycle.duree_total > 0
     ).all()
-    
-    temps_moyen = 0.0
-    if cycles_aujourdhui:
-        temps_moyen = sum(c.duree_total for c in cycles_aujourdhui) / len(cycles_aujourdhui)
-        
+    temps_moyen = (
+        sum(c.duree_total for c in cycles_termines) / len(cycles_termines)
+        if cycles_termines else 0.0
+    )
+
+    # ── Alertes actives ───────────────────────────────────────────────────────
+    # Trucks en cours (sans sortie) dont le premier événement 24h > 120 min
+    from app.config import get_settings
+    settings = get_settings()
+    seuil_alerte = datetime.utcnow() - timedelta(minutes=settings.seuil_cycle_total_max)
+
+    # Premier événement de chaque truck dans les 24h
+    premiers_events = db.query(
+        Event.truck_id,
+        func.min(Event.horodatage).label("premier_ev")
+    ).filter(
+        Event.horodatage >= depuis_24h
+    ).group_by(Event.truck_id).subquery()
+
+    alertes = db.query(func.count()).select_from(premiers_events).filter(
+        premiers_events.c.premier_ev <= seuil_alerte,
+        ~premiers_events.c.truck_id.in_(db.query(trucks_sortis))
+    ).scalar() or 0
+
+    # ── Poste bloquant & cause de retard ──────────────────────────────────────
     detector = AnomalyDetector(db)
     bloquant_info = detector.get_poste_bloquant()
-    
-    # Récupération dynamique de la cause principale de retard
-    top_cause = db.query(DelayCause).filter(DelayCause.is_active == True).order_by(DelayCause.usage_count.desc()).first()
-    top_cause_name = top_cause.nom if top_cause else "Aucun retard"
-    
+
+    top_cause = db.query(DelayCause).filter(
+        DelayCause.is_active == True
+    ).order_by(DelayCause.usage_count.desc()).first()
+    top_cause_name = top_cause.nom if top_cause else None
+
     return DashboardStats(
         camions_en_cours=camions_en_cours,
         camions_aujourdhui=camions_aujourdhui,
         temps_moyen_cycle=round(temps_moyen, 1),
         poste_bloquant=bloquant_info.get("poste_bloquant"),
-        alertes_actives=db.query(Cycle).filter(Cycle.status == TruckStatus.EN_COURS, Cycle.est_anomalie == True).count(),
+        alertes_actives=alertes,
         top_cause_retard=top_cause_name
     )

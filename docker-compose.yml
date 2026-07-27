@@ -60,8 +60,14 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+  adminer:
+    image: adminer:latest
+    container_name: lafarge_adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
     depends_on:
-      - backend
+      - db
 
 volumes:
   postgres_data:

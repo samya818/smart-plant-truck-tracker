@@ -40,6 +40,8 @@ class EventIngestionService:
         """
         truck = self._get_or_create_truck(plaque)
         now = horodatage or datetime.utcnow()
+        if now.tzinfo is not None:
+            now = now.replace(tzinfo=None)
 
         config = self.db.query(PosteConfig).filter(PosteConfig.poste == poste).first()
         if config and not config.is_active:
@@ -141,15 +143,21 @@ class EventIngestionService:
 
     def _recalculate_durations(self, cycle: Cycle):
         """Recalcule toutes les durées à partir des paires entree/sortie."""
+        def make_naive(dt):
+            return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
+
+        entree_porte = make_naive(cycle.entree_porte)
+        sortie_porte = make_naive(cycle.sortie_porte)
+
         events = self.db.query(Event).filter(
             Event.truck_id == cycle.truck_id,
-            Event.horodatage >= cycle.entree_porte
+            Event.horodatage >= entree_porte
         ).order_by(Event.horodatage).all()
 
         poste_times = {}
         for ev in events:
             key = (ev.poste, ev.type_event)
-            poste_times[key] = ev.horodatage
+            poste_times[key] = make_naive(ev.horodatage)
 
         # Parking
         if (PosteType.PARKING, "entree") in poste_times and (PosteType.PARKING, "sortie") in poste_times:
@@ -159,13 +167,13 @@ class EventIngestionService:
         bascule_entries = [e for e in events if e.poste == PosteType.BASCULE and e.type_event == "entree"]
         bascule_exits = [e for e in events if e.poste == PosteType.BASCULE and e.type_event == "sortie"]
         if len(bascule_entries) >= 1 and len(bascule_exits) >= 1:
-            cycle.duree_bascule_tare = (bascule_exits[0].horodatage - bascule_entries[0].horodatage).total_seconds() / 60
+            cycle.duree_bascule_tare = (make_naive(bascule_exits[0].horodatage) - make_naive(bascule_entries[0].horodatage)).total_seconds() / 60
         if len(bascule_entries) >= 2 and len(bascule_exits) >= 2:
-            cycle.duree_bascule_brut = (bascule_exits[1].horodatage - bascule_entries[1].horodatage).total_seconds() / 60
+            cycle.duree_bascule_brut = (make_naive(bascule_exits[1].horodatage) - make_naive(bascule_entries[1].horodatage)).total_seconds() / 60
 
         # Ensachage
         if (PosteType.ENSACHAGE, "entree") in poste_times and (PosteType.ENSACHAGE, "sortie") in poste_times:
             cycle.duree_ensachage = (poste_times[(PosteType.ENSACHAGE, "sortie")] - poste_times[(PosteType.ENSACHAGE, "entree")]).total_seconds() / 60
 
-        if cycle.sortie_porte and cycle.entree_porte:
-            cycle.duree_total = (cycle.sortie_porte - cycle.entree_porte).total_seconds() / 60
+        if sortie_porte and entree_porte:
+            cycle.duree_total = (sortie_porte - entree_porte).total_seconds() / 60

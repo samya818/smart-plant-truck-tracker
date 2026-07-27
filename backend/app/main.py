@@ -21,8 +21,40 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup : création tables + lancement services en arrière-plan."""
+    """Startup : création tables + nettoyage + lancement services en arrière-plan."""
     Base.metadata.create_all(bind=engine)
+
+    # Nettoyage des cycles orphelins (redémarrages multiples du conteneur)
+    from app.database import SessionLocal
+    from app.models import Cycle, TruckStatus, PosteConfig, PosteType, CaptureMode
+    from datetime import datetime, timedelta
+    db = SessionLocal()
+    try:
+        seuil = datetime.utcnow() - timedelta(hours=2)
+        orphelins = db.query(Cycle).filter(
+            Cycle.status == TruckStatus.EN_COURS,
+            Cycle.entree_porte < seuil
+        ).all()
+        for c in orphelins:
+            c.status = TruckStatus.TERMINE
+            c.sortie_porte = c.entree_porte + timedelta(minutes=90)
+            c.duree_total = 90.0
+        db.commit()
+
+        # Seed par défaut pour poste_configs si vide
+        if db.query(PosteConfig).count() == 0:
+            defaults = [
+                PosteConfig(poste=PosteType.PORTE_USINE, capture_mode=CaptureMode.HYBRID, camera_url="rtsp://cam-porte:554/stream1", is_active=True),
+                PosteConfig(poste=PosteType.PARKING, capture_mode=CaptureMode.AGENT, camera_url="", is_active=True),
+                PosteConfig(poste=PosteType.BASCULE, capture_mode=CaptureMode.HYBRID, camera_url="rtsp://cam-bascule:554/stream1", is_active=True),
+                PosteConfig(poste=PosteType.ENSACHAGE, capture_mode=CaptureMode.CAMERA, camera_url="rtsp://cam-ensachage:554/stream1", is_active=True),
+            ]
+            db.add_all(defaults)
+            db.commit()
+            print("[Startup] Configuration initiale des 4 postes (Bi-Mode) insérée")
+    finally:
+        db.close()
+
 
     if settings.cv_mode == "simulation":
         cv_service = CVService()
@@ -33,6 +65,7 @@ async def lifespan(app: FastAPI):
 
     yield
     print("Arrêt du serveur...")
+
 
 
 app = FastAPI(

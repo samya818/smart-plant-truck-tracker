@@ -24,7 +24,7 @@ class TransporteurRead(TransporteurBase):
 
 
 class TruckBase(BaseModel):
-    immatriculation: str = Field(..., pattern=r"^[0-9A-Z-]+$", max_length=20)
+    immatriculation: str = Field(..., pattern=r"^[\w\u0600-\u06FF-]+$", max_length=20)
     type_camion: str = "standard"
 
 class TruckCreate(TruckBase):
