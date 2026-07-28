@@ -29,19 +29,17 @@ def list_active_events(db: Session = Depends(get_db)):
     if not cycles_en_cours:
         return []
 
-    truck_ids_en_cours = [c.truck_id for c in cycles_en_cours]
-
-    # Pour chaque camion EN_COURS, récupérer tous ses événements depuis l'entrée du cycle
-    # (on prend l'entrée du cycle le plus récent pour borner la requête)
-    earliest_entry = min(c.entree_porte for c in cycles_en_cours)
+    # Construire les filtres pour chaque cycle actif (truck_id et horodatage >= entree_porte)
+    from sqlalchemy import or_, and_
+    conditions = [
+        and_(Event.truck_id == c.truck_id, Event.horodatage >= (c.entree_porte.replace(tzinfo=None) if c.entree_porte.tzinfo else c.entree_porte))
+        for c in cycles_en_cours
+    ]
 
     events = (
         db.query(Event)
         .options(joinedload(Event.truck))
-        .filter(
-            Event.truck_id.in_(truck_ids_en_cours),
-            Event.horodatage >= earliest_entry
-        )
+        .filter(or_(*conditions))
         .order_by(Event.horodatage.desc())
         .all()
     )

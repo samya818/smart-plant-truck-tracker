@@ -158,21 +158,15 @@ export default function Dashboard() {
     }).catch(err => alert(`Erreur d'enregistrement de l'URL: ${err.message}`));
   };
 
-  // Groupement des événements par camion + séparation en cours / terminés
+  // Groupement des événements par camion (tous renvoyés par /api/events/active sont EN_COURS)
   const truckGroups = groupEventsByTruck(events);
 
-  // Un camion est "en cours" si son événement le PLUS RÉCENT n'est PAS (porte_usine + sortie)
   const encours: [number, Event[]][] = [];
-  const termines: [number, Event[]][] = [];
   for (const [id, evs] of truckGroups.entries()) {
     const sortedEvs = [...evs].sort(
       (a, b) => new Date(a.horodatage).getTime() - new Date(b.horodatage).getTime()
     );
-    const lastEvent = sortedEvs[sortedEvs.length - 1];
-    const estActuellementSorti = lastEvent && lastEvent.poste === 'porte_usine' && lastEvent.type_event === 'sortie';
-
-    if (estActuellementSorti) termines.push([id, sortedEvs]);
-    else encours.push([id, sortedEvs]);
+    encours.push([id, sortedEvs]);
   }
 
   return (
@@ -230,23 +224,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* ── Camions TERMINÉS (dernières 24h) ── */}
-          {termines.length > 0 && (
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-800">✅ Cycles terminés (24h)</h2>
-                <span className="text-xs font-medium bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                  {termines.length} terminé{termines.length > 1 ? 's' : ''}
-                </span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {termines.map(([truckId, truckEvents]) => {
-                  const immat = truckEvents[0]?.truck?.immatriculation || `Camion #${truckId}`;
-                  return <TruckCard key={truckId} immatriculation={immat} events={truckEvents} />;
-                })}
-              </div>
-            </div>
-          )}
+
         </div>
 
         {/* Panel droite : Configuration + Seuils */}
