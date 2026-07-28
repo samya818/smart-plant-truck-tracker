@@ -26,8 +26,9 @@ class CaptureMode(str, enum.Enum):
 
 class TruckStatus(str, enum.Enum):
     EN_COURS = "EN_COURS"
-    TERMINE = "TERMINE"
+    TERMINE  = "TERMINE"
     ANOMALIE = "ANOMALIE"
+    EXPIRE   = "EXPIRE"    # Cycle EN_COURS depuis trop longtemps → watchdog
 
 
 # ============================================================
@@ -138,7 +139,9 @@ class Cycle(Base):
     duree_bascule_brut = Column(Float, default=0.0)
     duree_total = Column(Float, default=0.0)
     status = Column(Enum(TruckStatus), default=TruckStatus.EN_COURS)
-    est_anomalie = Column(Boolean, default=False)
+    est_anomalie    = Column(Boolean, default=False)
+    auto_closed     = Column(Boolean, default=False)   # fermé automatiquement par le système
+    gap_applique    = Column(Float,   nullable=True)    # gap route appliqué (minutes)
     truck = relationship("Truck", back_populates="cycles")
 
     @property

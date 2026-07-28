@@ -7,9 +7,10 @@ from typing import Dict
 from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import Cycle, Event, TruckStatus, DelayCause, PosteType, PosteConfig
+from app.models import Cycle, Event, TruckStatus, DelayCause, PosteType, PosteConfig, EtapeConfig
 from app.schemas import DashboardStats
 from app.services.anomaly_detector import AnomalyDetector
+from app.services.event_ingestion import EventIngestionService
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 
@@ -332,3 +333,29 @@ def delete_etape(etape_id: int, db: Session = Depends(get_db)):
     db.delete(etape)
     db.commit()
     return {"status": "ok", "message": f"Étape '{etape.nom}' supprimée"}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ANOMALIES & WATCHDOG
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/anomalies")
+def get_anomalies(db: Session = Depends(get_db)):
+    """
+    Rapport des situations anormales :
+    - Cycles EN_COURS depuis plus de 4h (camions bloqués)
+    - Cycles fermés automatiquement (auto-closed)
+    - Cycles EXPIRE (watchdog)
+    """
+    return EventIngestionService.get_anomalies(db)
+
+
+@router.post("/watchdog")
+def run_watchdog(db: Session = Depends(get_db)):
+    """
+    Déclenche manuellement le watchdog.
+    Marque EXPIRE tout cycle EN_COURS depuis plus de 8h.
+    Appelé aussi automatiquement au démarrage via APScheduler.
+    """
+    count = EventIngestionService.run_watchdog(db)
+    return {"status": "ok", "cycles_expires": count, "message": f"{count} cycle(s) marqué(s) EXPIRE"}

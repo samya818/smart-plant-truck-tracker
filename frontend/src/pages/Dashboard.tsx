@@ -10,6 +10,17 @@ import { Edit2, Check, X, Camera, Smartphone, RefreshCw, BarChart2, Timer, Save 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+interface AnomalieItem {
+  cycle_id: number;
+  immatriculation: string;
+  entree_porte: string | null;
+  sortie_porte: string | null;
+  status: string;
+  duree_heures: number | null;
+  auto_closed: boolean;
+  gap_applique: number | null;
+}
+
 
 interface Etape {
   id: number;
@@ -58,6 +69,13 @@ export default function Dashboard() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEtape, setNewEtape] = useState({ nom: '', description: '', seuil_minutes: 30 });
   const [etapeSaving, setEtapeSaving] = useState<number | null>(null);
+  // ── Anomalies ───────────────────────────────────────────
+  const [anomalies, setAnomalies] = useState<{
+    en_cours_vieux: AnomalieItem[];
+    auto_fermes: AnomalieItem[];
+    expires: AnomalieItem[];
+    total_alertes: number;
+  } | null>(null);
   const { lastMessage, isConnected } = useWebSocket(WS_URL);
 
   const loadEtapes = useCallback(async () => {
@@ -66,6 +84,18 @@ export default function Dashboard() {
       setEtapes(await res.json());
     } catch { /* silencieux */ }
   }, []);
+
+  const loadAnomalies = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/dashboard/anomalies`);
+      setAnomalies(await res.json());
+    } catch { /* silencieux */ }
+  }, []);
+
+  const runWatchdog = async () => {
+    await fetch(`${API_BASE}/api/dashboard/watchdog`, { method: 'POST' });
+    loadAnomalies();
+  };
 
   const saveEtape = async (id: number) => {
     setEtapeSaving(id);
@@ -104,8 +134,8 @@ export default function Dashboard() {
     getPosteConfigs().then(setPosteConfigs);
   };
 
-  useEffect(() => { reloadData(); loadEtapes(); }, [loadEtapes]);
-  useEffect(() => { if (lastMessage) reloadData(); }, [lastMessage]);
+  useEffect(() => { reloadData(); loadEtapes(); loadAnomalies(); }, [loadEtapes, loadAnomalies]);
+  useEffect(() => { if (lastMessage) { reloadData(); loadAnomalies(); } }, [lastMessage]);
 
   const handleToggleMode = (posteName: string, currentMode: 'camera' | 'agent' | 'hybrid') => {
     const modes: ('camera' | 'agent' | 'hybrid')[] = ['camera', 'agent', 'hybrid'];
@@ -468,6 +498,97 @@ export default function Dashboard() {
       </div>
 
       <StatsChart />
+
+      {/* ── Panneau Anomalies ── */}
+      {anomalies && (
+        <div className="mt-6 bg-white rounded-xl shadow border border-gray-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🔍</span>
+              <h2 className="text-base font-bold text-gray-800">Anomalies &amp; Cycles Incomplets</h2>
+              {anomalies.total_alertes > 0 && (
+                <span className="text-xs font-extrabold bg-red-500 text-white px-2 py-0.5 rounded-full">
+                  {anomalies.total_alertes} alerte{anomalies.total_alertes > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={runWatchdog}
+              className="text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+            >
+              <RefreshCw className="w-3.5 h-3.5" /> Lancer Watchdog
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Cycles bloqués (EN_COURS depuis +4h) */}
+            <div className="border border-red-100 rounded-xl p-3 bg-red-50/30">
+              <div className="text-xs font-bold text-red-700 mb-2 flex items-center gap-1">
+                <span>⏳</span> Camions bloqués &gt;4h
+                <span className="ml-auto bg-red-100 text-red-700 rounded-full px-1.5 py-0.5 text-[10px]">
+                  {anomalies.en_cours_vieux.length}
+                </span>
+              </div>
+              {anomalies.en_cours_vieux.length === 0 ? (
+                <p className="text-[11px] text-gray-400 text-center py-2">✅ Aucun camion bloqué</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {anomalies.en_cours_vieux.map(a => (
+                    <div key={a.cycle_id} className="text-[11px] bg-white border border-red-100 rounded-lg px-2.5 py-1.5">
+                      <div className="font-bold text-gray-800">{a.immatriculation}</div>
+                      <div className="text-gray-400">Entré il y a <span className="text-red-600 font-semibold">{a.duree_heures}h</span></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Cycles auto-fermés */}
+            <div className="border border-orange-100 rounded-xl p-3 bg-orange-50/30">
+              <div className="text-xs font-bold text-orange-700 mb-2 flex items-center gap-1">
+                <span>🔄</span> Auto-fermés
+                <span className="ml-auto bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5 text-[10px]">
+                  {anomalies.auto_fermes.length}
+                </span>
+              </div>
+              {anomalies.auto_fermes.length === 0 ? (
+                <p className="text-[11px] text-gray-400 text-center py-2">✅ Aucun cycle auto-fermé</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {anomalies.auto_fermes.map(a => (
+                    <div key={a.cycle_id} className="text-[11px] bg-white border border-orange-100 rounded-lg px-2.5 py-1.5">
+                      <div className="font-bold text-gray-800">{a.immatriculation}</div>
+                      <div className="text-gray-400">Gap appliqué : <span className="text-orange-600 font-semibold">{a.gap_applique} min</span></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Cycles expirés (watchdog) */}
+            <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/30">
+              <div className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1">
+                <span>☠️</span> Expirés (watchdog)
+                <span className="ml-auto bg-gray-200 text-gray-600 rounded-full px-1.5 py-0.5 text-[10px]">
+                  {anomalies.expires.length}
+                </span>
+              </div>
+              {anomalies.expires.length === 0 ? (
+                <p className="text-[11px] text-gray-400 text-center py-2">✅ Aucun cycle expiré</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {anomalies.expires.map(a => (
+                    <div key={a.cycle_id} className="text-[11px] bg-white border border-gray-200 rounded-lg px-2.5 py-1.5">
+                      <div className="font-bold text-gray-800">{a.immatriculation}</div>
+                      <div className="text-gray-400">Durée : <span className="text-gray-600 font-semibold">{a.duree_heures}h</span></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
