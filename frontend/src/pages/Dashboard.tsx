@@ -169,6 +169,14 @@ export default function Dashboard() {
     encours.push([id, sortedEvs]);
   }
 
+  // Tri déterministe et stable par ordre d'arrivée dans l'usine (date du 1er événement)
+  encours.sort((a, b) => {
+    const timeA = new Date(a[1][0]?.horodatage || 0).getTime();
+    const timeB = new Date(b[1][0]?.horodatage || 0).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return a[0] - b[0]; // fallback par ID camion pour garantir la stabilité
+  });
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
