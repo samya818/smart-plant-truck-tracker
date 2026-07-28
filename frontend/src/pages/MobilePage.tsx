@@ -3,7 +3,6 @@ import { AgentCapture } from '@/components/mobile/AgentCapture';
 
 export default function MobilePage() {
   const [poste, setPoste] = useState<'porte_usine' | 'parking' | 'bascule' | 'ensachage'>('parking');
-  const [agentId] = useState('agent_01');
 
   return (
     <div className="max-w-md mx-auto bg-gray-100 min-h-screen">
@@ -20,7 +19,7 @@ export default function MobilePage() {
           <option value="ensachage">Ensachage</option>
         </select>
       </div>
-      <AgentCapture poste={poste} agentId={agentId} />
+      <AgentCapture poste={poste} />
     </div>
   );
 }
