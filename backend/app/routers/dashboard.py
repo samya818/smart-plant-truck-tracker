@@ -1,15 +1,165 @@
 """Router API pour les statistiques du dashboard."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, distinct
 from datetime import datetime, timedelta, timezone
+from typing import Dict
+from pydantic import BaseModel
 
 from app.database import get_db
-from app.models import Cycle, Event, TruckStatus, DelayCause, PosteType
+from app.models import Cycle, Event, TruckStatus, DelayCause, PosteType, PosteConfig
 from app.schemas import DashboardStats
 from app.services.anomaly_detector import AnomalyDetector
 
 router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
+
+@router.get("/stats", response_model=DashboardStats)
+def get_stats(db: Session = Depends(get_db)):
+    """
+    KPIs calculés depuis la table EVENTS (même source que le frontend).
+    Garantit la cohérence avec ce que l'utilisateur voit dans l'interface.
+    """
+    # Fuseau horaire Maroc (UTC+1)
+    tz_maroc = timezone(timedelta(hours=1))
+    now_maroc = datetime.now(tz=tz_maroc)
+    today_utc = now_maroc.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
+    depuis_24h = datetime.utcnow() - timedelta(hours=24)
+
+    # ── Camions en cours ──────────────────────────────────────────────────────
+    trucks_24h = db.query(distinct(Event.truck_id)).filter(
+        Event.horodatage >= depuis_24h
+    ).subquery()
+
+    trucks_sortis = db.query(distinct(Event.truck_id)).filter(
+        Event.horodatage >= depuis_24h,
+        Event.poste == PosteType.PORTE_USINE,
+        Event.type_event == "sortie"
+    ).subquery()
+
+    camions_en_cours = db.query(func.count(distinct(Event.truck_id))).filter(
+        Event.horodatage >= depuis_24h,
+        ~Event.truck_id.in_(db.query(trucks_sortis))
+    ).scalar() or 0
+
+    # ── Aujourd'hui ───────────────────────────────────────────────────────────
+    camions_aujourdhui = db.query(func.count(distinct(Event.truck_id))).filter(
+        Event.horodatage >= today_utc
+    ).scalar() or 0
+
+    # ── Temps moyen cycle ─────────────────────────────────────────────────────
+    sept_jours = datetime.utcnow() - timedelta(days=7)
+    cycles_termines = db.query(Cycle).filter(
+        Cycle.status == TruckStatus.TERMINE,
+        Cycle.entree_porte >= sept_jours,
+        Cycle.duree_total > 0
+    ).all()
+    temps_moyen = (
+        sum(c.duree_total for c in cycles_termines) / len(cycles_termines)
+        if cycles_termines else 0.0
+    )
+
+    # ── Alertes actives ───────────────────────────────────────────────────────
+    from app.config import get_settings
+    settings = get_settings()
+
+    # Lire le seuil cycle total depuis la DB (porte_usine.seuil_attente_max)
+    cfg_porte = db.query(PosteConfig).filter(PosteConfig.poste == PosteType.PORTE_USINE).first()
+    seuil_total = cfg_porte.seuil_attente_max if cfg_porte else settings.seuil_cycle_total_max
+    seuil_alerte = datetime.utcnow() - timedelta(minutes=seuil_total)
+
+    premiers_events = db.query(
+        Event.truck_id,
+        func.min(Event.horodatage).label("premier_ev")
+    ).filter(
+        Event.horodatage >= depuis_24h
+    ).group_by(Event.truck_id).subquery()
+
+    alertes = db.query(func.count()).select_from(premiers_events).filter(
+        premiers_events.c.premier_ev <= seuil_alerte,
+        ~premiers_events.c.truck_id.in_(db.query(trucks_sortis))
+    ).scalar() or 0
+
+    # ── Poste bloquant & cause de retard ──────────────────────────────────────
+    detector = AnomalyDetector(db)
+    bloquant_info = detector.get_poste_bloquant()
+
+    top_cause = db.query(DelayCause).filter(
+        DelayCause.is_active == True
+    ).order_by(DelayCause.usage_count.desc()).first()
+    top_cause_name = top_cause.nom if top_cause else None
+
+    return DashboardStats(
+        camions_en_cours=camions_en_cours,
+        camions_aujourdhui=camions_aujourdhui,
+        temps_moyen_cycle=round(temps_moyen, 1),
+        poste_bloquant=bloquant_info.get("poste_bloquant"),
+        alertes_actives=alertes,
+        top_cause_retard=top_cause_name
+    )
+
+
+# ── Schémas Seuils ───────────────────────────────────────────────────────────
+class SeuilsPayload(BaseModel):
+    parking: int       # minutes max autorisées au parking
+    bascule_tare: int  # minutes max pour la pesée à vide
+    ensachage: int     # minutes max pour le chargement
+    bascule_brut: int  # minutes max pour la pesée chargé
+    cycle_total: int   # durée totale max autorisée (entrée → sortie)
+
+
+POSTE_TO_FIELD = {
+    PosteType.PARKING:    "parking",
+    PosteType.BASCULE:    "bascule_tare",
+    PosteType.ENSACHAGE:  "ensachage",
+    PosteType.PORTE_USINE: "cycle_total",
+}
+
+
+@router.get("/seuils")
+def get_seuils(db: Session = Depends(get_db)):
+    """
+    Retourne les seuils de durée configurés par le superviseur pour chaque zone.
+    Fallback sur les valeurs de config si la DB ne les a pas encore.
+    """
+    from app.config import get_settings
+    cfg = get_settings()
+
+    configs = {c.poste: c for c in db.query(PosteConfig).all()}
+
+    def seuil(poste: PosteType, default: int) -> int:
+        c = configs.get(poste)
+        return c.seuil_attente_max if c else default
+
+    return {
+        "parking":     seuil(PosteType.PARKING,    cfg.seuil_attente_parking_max),
+        "bascule_tare": seuil(PosteType.BASCULE,   cfg.seuil_bascule_max),
+        "ensachage":   seuil(PosteType.ENSACHAGE,  cfg.seuil_ensachage_max),
+        "bascule_brut": seuil(PosteType.BASCULE,   cfg.seuil_bascule_max),
+        "cycle_total": seuil(PosteType.PORTE_USINE, cfg.seuil_cycle_total_max),
+    }
+
+
+@router.put("/seuils")
+def update_seuils(payload: SeuilsPayload, db: Session = Depends(get_db)):
+    """
+    Met à jour les seuils de durée par zone.
+    Persiste en base dans la table poste_configs.
+    """
+    updates = {
+        PosteType.PARKING:     payload.parking,
+        PosteType.BASCULE:     payload.bascule_tare,
+        PosteType.ENSACHAGE:   payload.ensachage,
+        PosteType.PORTE_USINE: payload.cycle_total,
+    }
+    for poste, valeur in updates.items():
+        cfg = db.query(PosteConfig).filter(PosteConfig.poste == poste).first()
+        if cfg:
+            cfg.seuil_attente_max = valeur
+        else:
+            db.add(PosteConfig(poste=poste, seuil_attente_max=valeur))
+    db.commit()
+    return {"status": "ok", "message": "Seuils mis à jour avec succès", "seuils": payload.dict()}
+
 
 @router.get("/stats", response_model=DashboardStats)
 def get_stats(db: Session = Depends(get_db)):
