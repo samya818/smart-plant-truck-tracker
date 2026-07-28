@@ -26,20 +26,11 @@ def get_stats(db: Session = Depends(get_db)):
     today_utc = now_maroc.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
     depuis_24h = datetime.utcnow() - timedelta(hours=24)
 
-    # ── Camions en cours ──────────────────────────────────────────────────────
-    trucks_24h = db.query(distinct(Event.truck_id)).filter(
-        Event.horodatage >= depuis_24h
-    ).subquery()
-
-    trucks_sortis = db.query(distinct(Event.truck_id)).filter(
-        Event.horodatage >= depuis_24h,
-        Event.poste == PosteType.PORTE_USINE,
-        Event.type_event == "sortie"
-    ).subquery()
-
-    camions_en_cours = db.query(func.count(distinct(Event.truck_id))).filter(
-        Event.horodatage >= depuis_24h,
-        ~Event.truck_id.in_(db.query(trucks_sortis))
+    # ── Camions en cours — source de vérité : table cycles ──────────────────
+    depuis_24h = datetime.utcnow() - timedelta(hours=24)
+    camions_en_cours = db.query(func.count(Cycle.id)).filter(
+        Cycle.status == TruckStatus.EN_COURS,
+        Cycle.entree_porte >= depuis_24h
     ).scalar() or 0
 
     # ── Aujourd'hui ───────────────────────────────────────────────────────────

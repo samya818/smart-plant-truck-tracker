@@ -78,35 +78,73 @@ class CVService:
 
     async def run_simulation_loop(self):
         """
-        Boucle de simulation en arrière-plan.
-        Génère des événements de camion toutes les 5-15 secondes
-        en respectant la logique de cycle (pas de sortie sans entrée).
+        Boucle de simulation : chaque camion a sa propre coroutine indépendante.
+        Ainsi les cycles ne s'entremêlent plus entre camions.
         """
         print("[CV] Mode simulation activé — génération d'événements...")
 
-        # Restaurer l'état depuis la DB au démarrage (évite les cycles orphelins)
+        # Restaurer l'état depuis la DB au démarrage
         db = SessionLocal()
         try:
             self._restore_state_from_db(db)
         finally:
             db.close()
 
+        # Lancer une coroutine indépendante par plaque
+        tasks = [asyncio.create_task(self._simulate_truck(plaque)) for plaque in self.plaques]
+        await asyncio.gather(*tasks)
+
+    async def _simulate_truck(self, plaque: str):
+        """
+        Coroutine indépendante par camion.
+        Chaque étape du cycle est jouée dans l'ordre, avec un délai réaliste entre elles.
+        """
+        # Délai de démarrage aléatoire pour ne pas tous partir en même temps
+        await asyncio.sleep(random.uniform(0, 30))
+
+        if plaque not in self.sim_state:
+            self.sim_state[plaque] = {"index": 0}
+
+        # Durée entre chaque étape (en secondes) — simuler des temps réalistes
+        step_delays = [
+            random.randint(5, 10),    # porte_usine entree → parking entree
+            random.randint(10, 30),   # parking entree → parking sortie
+            random.randint(5, 10),    # parking sortie → bascule entree (tare)
+            random.randint(8, 20),    # bascule entree → bascule sortie (tare)
+            random.randint(5, 10),    # bascule sortie → ensachage entree
+            random.randint(15, 40),   # ensachage entree → ensachage sortie
+            random.randint(5, 10),    # ensachage sortie → bascule entree (brut)
+            random.randint(5, 15),    # bascule entree → bascule sortie (brut)
+            random.randint(5, 10),    # bascule sortie → porte_usine sortie
+            random.randint(20, 60),   # porte_usine sortie → prochaine entree (temps hors usine)
+        ]
+
         while True:
-            await asyncio.sleep(random.randint(5, 15))
+            state = self.sim_state[plaque]
+            idx = state["index"]
+            poste, type_event = self.postes_cycle[idx]
+
+            # Attendre le délai de cette étape
+            await asyncio.sleep(step_delays[idx])
+
+            # Régénérer les délais aléatoires pour le prochain cycle
+            if idx == len(self.postes_cycle) - 1:
+                step_delays = [
+                    random.randint(5, 10),
+                    random.randint(10, 30),
+                    random.randint(5, 10),
+                    random.randint(8, 20),
+                    random.randint(5, 10),
+                    random.randint(15, 40),
+                    random.randint(5, 10),
+                    random.randint(5, 15),
+                    random.randint(5, 10),
+                    random.randint(20, 60),
+                ]
 
             db = SessionLocal()
             try:
-                plaque = random.choice(self.plaques)
                 service = EventIngestionService(db)
-
-                # Initialiser l'état si nouveau camion (pas encore en cycle)
-                if plaque not in self.sim_state:
-                    self.sim_state[plaque] = {"index": 0}
-
-                state = self.sim_state[plaque]
-                poste, type_event = self.postes_cycle[state["index"]]
-
-                # Créer l'événement via le service unifié
                 service.ingest_event(
                     plaque=plaque,
                     poste=poste,
@@ -114,14 +152,14 @@ class CVService:
                     source="simulation",
                     confiance_ocr=round(random.uniform(0.75, 0.99), 2)
                 )
-
                 print(f"[CV-Sim] {plaque} | {poste.value} | {type_event}")
-
-                # Avancer l'index pour le prochain tour
-                state["index"] = (state["index"] + 1) % len(self.postes_cycle)
-
+            except Exception as e:
+                print(f"[CV-Sim] Erreur {plaque}: {e}")
             finally:
                 db.close()
+
+            # Avancer à l'étape suivante
+            self.sim_state[plaque]["index"] = (idx + 1) % len(self.postes_cycle)
 
     def detect_from_camera(self, camera_url: str) -> Optional[dict]:
         """
