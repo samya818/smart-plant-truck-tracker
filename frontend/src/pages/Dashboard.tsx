@@ -6,27 +6,26 @@ import { TruckCard } from '@/components/TruckCard';
 import { AlertBanner } from '@/components/AlertBanner';
 import { StatsChart } from '@/components/StatsChart';
 import type { DashboardStats, Event, PosteConfig } from '@/types';
-import { Edit2, Check, X, Camera, Smartphone, RefreshCw, BarChart2, Timer, Save, RotateCcw } from 'lucide-react';
+import { Edit2, Check, X, Camera, Smartphone, RefreshCw, BarChart2, Timer, Save } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-interface Seuils {
-  parking: number;
-  bascule_tare: number;
-  ensachage: number;
-  bascule_brut: number;
-  cycle_total: number;
+
+interface Etape {
+  id: number;
+  ordre: number;
+  code: string;
+  nom: string;
+  description: string;
+  seuil_minutes: number;
+  poste_ref: string | null;
+  is_active: boolean;
+  is_default: boolean;
+  is_custom: boolean;
 }
 
-const SEUILS_DEFAULTS: Seuils = { parking: 30, bascule_tare: 15, ensachage: 45, bascule_brut: 15, cycle_total: 120 };
+const STEP_COLORS = ['bg-slate-400','bg-blue-500','bg-purple-500','bg-orange-500','bg-purple-400','bg-slate-500','bg-red-500'];
 
-const ZONES_CONFIG = [
-  { key: 'parking',      label: '🅿️ Parking',       desc: 'Attente avant pesage',       min: 5,  max: 120, step: 5,  color: 'blue'   },
-  { key: 'bascule_tare', label: '⚖️ Bascule (Tare)', desc: 'Pesage camion vide',         min: 5,  max: 60,  step: 5,  color: 'purple' },
-  { key: 'ensachage',    label: '📦 Ensachage',      desc: 'Chargement des sacs',        min: 10, max: 180, step: 5,  color: 'orange' },
-  { key: 'bascule_brut', label: '⚖️ Bascule (Brut)', desc: 'Pesage camion chargé',       min: 5,  max: 60,  step: 5,  color: 'purple' },
-  { key: 'cycle_total',  label: '🔄 Cycle Total',    desc: 'Durée totale max en usine',  min: 30, max: 360, step: 15, color: 'red'    },
-] as const;
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/live';
 
@@ -52,42 +51,51 @@ export default function Dashboard() {
   const [posteConfigs, setPosteConfigs] = useState<PosteConfig[]>([]);
   const [editingPoste, setEditingPoste] = useState<string | null>(null);
   const [tempUrl, setTempUrl] = useState<string>('');
-  // ── Seuils ──────────────────────────────────────────────────────────
-  const [seuils, setSeuils] = useState<Seuils>(SEUILS_DEFAULTS);
-  const [seuilsDraft, setSeuilsDraft] = useState<Seuils>(SEUILS_DEFAULTS);
-  const [seuilsEditing, setSeuilsEditing] = useState(false);
-  const [seuilsSaving, setSeuilsSaving] = useState(false);
-  const [seuilsSaved, setSeuilsSaved] = useState(false);
+  // ── Étapes dynamiques ──────────────────────────────────────────
+  const [etapes, setEtapes] = useState<Etape[]>([]);
+  const [editingEtapeId, setEditingEtapeId] = useState<number | null>(null);
+  const [etapeDraft, setEtapeDraft] = useState<Partial<Etape>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newEtape, setNewEtape] = useState({ nom: '', description: '', seuil_minutes: 30 });
+  const [etapeSaving, setEtapeSaving] = useState<number | null>(null);
   const { lastMessage, isConnected } = useWebSocket(WS_URL);
 
-  const loadSeuils = useCallback(async () => {
+  const loadEtapes = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/dashboard/seuils`);
-      const data = await res.json();
-      setSeuils(data);
-      setSeuilsDraft(data);
-    } catch { /* fallback silencieux */ }
+      const res = await fetch(`${API_BASE}/api/dashboard/etapes`);
+      setEtapes(await res.json());
+    } catch { /* silencieux */ }
   }, []);
 
-  const saveSeuils = async () => {
-    setSeuilsSaving(true);
+  const saveEtape = async (id: number) => {
+    setEtapeSaving(id);
     try {
-      await fetch(`${API_BASE}/api/dashboard/seuils`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(seuilsDraft),
+      await fetch(`${API_BASE}/api/dashboard/etapes/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(etapeDraft),
       });
-      setSeuils(seuilsDraft);
-      setSeuilsEditing(false);
-      setSeuilsSaved(true);
-      setTimeout(() => setSeuilsSaved(false), 2500);
-    } catch { alert('Erreur lors de la sauvegarde des seuils'); }
-    finally { setSeuilsSaving(false); }
+      setEtapes(prev => prev.map(e => e.id === id ? { ...e, ...etapeDraft } : e));
+      setEditingEtapeId(null);
+    } catch { alert('Erreur sauvegarde'); }
+    finally { setEtapeSaving(null); }
   };
 
-  const cancelSeuils = () => {
-    setSeuilsDraft(seuils);
-    setSeuilsEditing(false);
+  const deleteEtape = async (id: number, nom: string) => {
+    if (!confirm(`Supprimer l'étape « ${nom} » ?`)) return;
+    await fetch(`${API_BASE}/api/dashboard/etapes/${id}`, { method: 'DELETE' });
+    setEtapes(prev => prev.filter(e => e.id !== id));
+  };
+
+  const addEtape = async () => {
+    if (!newEtape.nom.trim()) return;
+    const res = await fetch(`${API_BASE}/api/dashboard/etapes`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newEtape, ordre: etapes.length + 1 }),
+    });
+    const created = await res.json();
+    setEtapes(prev => [...prev, { ...created, is_active: true, is_default: false, is_custom: true, poste_ref: null, ordre: etapes.length + 1, code: created.code, description: newEtape.description }]);
+    setNewEtape({ nom: '', description: '', seuil_minutes: 30 });
+    setShowAddForm(false);
   };
 
   const reloadData = () => {
@@ -96,7 +104,7 @@ export default function Dashboard() {
     getPosteConfigs().then(setPosteConfigs);
   };
 
-  useEffect(() => { reloadData(); loadSeuils(); }, [loadSeuils]);
+  useEffect(() => { reloadData(); loadEtapes(); }, [loadEtapes]);
   useEffect(() => { if (lastMessage) reloadData(); }, [lastMessage]);
 
   const handleToggleMode = (posteName: string, currentMode: 'camera' | 'agent' | 'hybrid') => {
@@ -214,92 +222,166 @@ export default function Dashboard() {
         {/* Panel droite : Configuration + Seuils */}
         <div className="space-y-4">
 
-          {/* ── Panneau Seuils de Temps ── */}
+          {/* ── Panneau Étapes Dynamiques ── */}
           <div className="bg-white rounded-xl shadow border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Timer className="w-5 h-5 text-orange-500" />
-                <h2 className="text-base font-bold text-gray-800">⏱️ Seuils de Temps par Zone</h2>
+                <h2 className="text-base font-bold text-gray-800">⏱️ Étapes &amp; Seuils du Processus</h2>
               </div>
-              {!seuilsEditing ? (
-                <button
-                  onClick={() => setSeuilsEditing(true)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <Edit2 className="w-3.5 h-3.5" /> Modifier
-                </button>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={saveSeuils}
-                    disabled={seuilsSaving}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    <Save className="w-3.5 h-3.5" />{seuilsSaving ? 'Sauvegarde...' : 'Sauvegarder'}
+              <button
+                onClick={() => setShowAddForm(v => !v)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-violet-600 bg-violet-50 hover:bg-violet-100 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Save className="w-3.5 h-3.5" /> + Ajouter une étape
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">
+              Modifiez le nom, la description et le seuil de chaque étape. Ajoutez des étapes personnalisées selon vos besoins.
+            </p>
+
+            {/* Formulaire ajout */}
+            {showAddForm && (
+              <div className="bg-violet-50 border border-violet-200 rounded-xl p-3 mb-4 space-y-2">
+                <div className="text-xs font-bold text-violet-700 mb-1">➕ Nouvelle étape personnalisée</div>
+                <input
+                  type="text" placeholder="Nom de l'étape *"
+                  value={newEtape.nom} onChange={e => setNewEtape(p => ({ ...p, nom: e.target.value }))}
+                  className="w-full text-xs border border-violet-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
+                <input
+                  type="text" placeholder="Description (optionnel)"
+                  value={newEtape.description} onChange={e => setNewEtape(p => ({ ...p, description: e.target.value }))}
+                  className="w-full text-xs border border-violet-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                />
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-violet-700 font-semibold w-28 flex-shrink-0">Seuil (minutes) :</label>
+                  <input
+                    type="number" min={5} max={360}
+                    value={newEtape.seuil_minutes} onChange={e => setNewEtape(p => ({ ...p, seuil_minutes: Number(e.target.value) }))}
+                    className="w-24 text-xs border border-violet-200 rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                  />
+                  <span className="text-xs text-violet-500">min</span>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={addEtape} className="flex-1 text-xs font-semibold bg-violet-600 text-white py-2 rounded-lg hover:bg-violet-700 transition-colors">
+                    ✓ Confirmer
                   </button>
-                  <button
-                    onClick={cancelSeuils}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> Annuler
+                  <button onClick={() => setShowAddForm(false)} className="text-xs text-gray-500 bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200">
+                    Annuler
                   </button>
                 </div>
-              )}
-            </div>
-
-            {seuilsSaved && (
-              <div className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-3 flex items-center gap-2">
-                <Check className="w-3.5 h-3.5" /> Seuils enregistrés avec succès
               </div>
             )}
 
-            <p className="text-xs text-gray-400 mb-4">
-              Durée maximale autorisée par zone. Les camions dépassant ces valeurs déclenchent une alerte.
-            </p>
-
-            <div className="space-y-4">
-              {ZONES_CONFIG.map((zone) => {
-                const val = seuilsEditing ? seuilsDraft[zone.key] : seuils[zone.key];
-                const colorMap: Record<string, string> = {
-                  blue: 'text-blue-600 bg-blue-50', purple: 'text-purple-600 bg-purple-50',
-                  orange: 'text-orange-600 bg-orange-50', red: 'text-red-600 bg-red-50',
-                };
-                const sliderMap: Record<string, string> = {
-                  blue: 'accent-blue-600', purple: 'accent-purple-600',
-                  orange: 'accent-orange-500', red: 'accent-red-600',
-                };
+            {/* Liste des étapes */}
+            <div className="space-y-2">
+              {etapes.map((etape, idx) => {
+                const isEditing = editingEtapeId === etape.id;
+                const color = STEP_COLORS[Math.min(idx, STEP_COLORS.length - 1)];
                 return (
-                  <div key={zone.key}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div>
-                        <span className="text-xs font-bold text-gray-700">{zone.label}</span>
-                        <span className="text-[10px] text-gray-400 ml-2">{zone.desc}</span>
+                  <div key={etape.id} className={`border rounded-xl p-3 transition-colors ${isEditing ? 'border-orange-300 bg-orange-50/40' : 'border-gray-100 hover:bg-slate-50/50'}`}>
+                    <div className="flex items-start gap-2">
+                      {/* Numéro */}
+                      <div className={`w-6 h-6 rounded-md flex items-center justify-center text-[10px] font-extrabold text-white flex-shrink-0 mt-0.5 ${color}`}>
+                        {etape.ordre}
                       </div>
-                      <span className={`text-xs font-extrabold px-2 py-0.5 rounded-full ${colorMap[zone.color]}`}>
-                        {val} min
-                      </span>
+                      <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          <div className="space-y-1.5">
+                            <input
+                              type="text"
+                              value={etapeDraft.nom ?? etape.nom}
+                              onChange={e => setEtapeDraft(p => ({ ...p, nom: e.target.value }))}
+                              className="w-full text-xs font-semibold border border-orange-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                            />
+                            <input
+                              type="text"
+                              value={etapeDraft.description ?? etape.description}
+                              onChange={e => setEtapeDraft(p => ({ ...p, description: e.target.value }))}
+                              placeholder="Description..."
+                              className="w-full text-xs text-gray-500 border border-orange-200 rounded-lg px-2 py-1 focus:outline-none"
+                            />
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] text-orange-700 font-semibold">Seuil :</label>
+                              <input
+                                type="number" min={5} max={360}
+                                value={etapeDraft.seuil_minutes ?? etape.seuil_minutes}
+                                onChange={e => setEtapeDraft(p => ({ ...p, seuil_minutes: Number(e.target.value) }))}
+                                className="w-20 text-xs border border-orange-200 rounded-lg px-2 py-1 focus:outline-none"
+                              />
+                              <span className="text-[11px] text-gray-400">min</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-gray-800">{etape.nom}</span>
+                              {etape.is_default && (
+                                <span className="text-[9px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">SYSTÈME</span>
+                              )}
+                              {etape.is_custom && (
+                                <span className="text-[9px] font-bold bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full">CUSTOM</span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-gray-400 mt-0.5">{etape.description}</div>
+                          </>
+                        )}
+                      </div>
+                      {/* Seuil badge */}
+                      {!isEditing && (
+                        <span className="text-xs font-extrabold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full flex-shrink-0">
+                          {etape.seuil_minutes} min
+                        </span>
+                      )}
                     </div>
-                    {seuilsEditing ? (
-                      <input
-                        type="range"
-                        min={zone.min} max={zone.max} step={zone.step}
-                        value={seuilsDraft[zone.key]}
-                        onChange={(e) => setSeuilsDraft(prev => ({ ...prev, [zone.key]: Number(e.target.value) }))}
-                        className={`w-full h-2 rounded-full cursor-pointer ${sliderMap[zone.color]}`}
-                      />
-                    ) : (
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full ${
-                            zone.color === 'blue' ? 'bg-blue-500' : zone.color === 'purple' ? 'bg-purple-500' :
-                            zone.color === 'orange' ? 'bg-orange-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${Math.min((val / zone.max) * 100, 100)}%` }}
-                        />
+
+                    {/* Barre progress */}
+                    {!isEditing && (
+                      <div className="mt-2 ml-8">
+                        <div className="w-full bg-gray-100 rounded-full h-1.5">
+                          <div className={`h-1.5 rounded-full ${color}`}
+                            style={{ width: `${Math.min((etape.seuil_minutes / 120) * 100, 100)}%` }} />
+                        </div>
                       </div>
                     )}
-                    <div className="flex justify-between text-[10px] text-gray-300 mt-0.5">
-                      <span>{zone.min} min</span><span>{zone.max} min</span>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 mt-2 ml-8">
+                      {isEditing ? (
+                        <>
+                          <button
+                            onClick={() => saveEtape(etape.id)}
+                            disabled={etapeSaving === etape.id}
+                            className="flex items-center gap-1 text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            <Check className="w-3 h-3" />{etapeSaving === etape.id ? 'Sauvegarde...' : 'Sauvegarder'}
+                          </button>
+                          <button
+                            onClick={() => setEditingEtapeId(null)}
+                            className="text-[11px] text-gray-500 bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded-lg"
+                          >
+                            Annuler
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => { setEditingEtapeId(etape.id); setEtapeDraft({ nom: etape.nom, description: etape.description, seuil_minutes: etape.seuil_minutes }); }}
+                            className="flex items-center gap-1 text-[11px] text-orange-600 hover:text-orange-800 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors"
+                          >
+                            <Edit2 className="w-3 h-3" /> Modifier
+                          </button>
+                          {etape.is_custom && (
+                            <button
+                              onClick={() => deleteEtape(etape.id, etape.nom)}
+                              className="flex items-center gap-1 text-[11px] text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-colors"
+                            >
+                              <X className="w-3 h-3" /> Supprimer
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 );

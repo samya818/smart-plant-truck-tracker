@@ -245,3 +245,90 @@ def get_stats(db: Session = Depends(get_db)):
         alertes_actives=alertes,
         top_cause_retard=top_cause_name
     )
+
+
+# ── Schémas Étapes ────────────────────────────────────────────────────────────
+from app.models import EtapeConfig
+
+class EtapeCreate(BaseModel):
+    nom: str
+    description: str = ""
+    seuil_minutes: int = 30
+    ordre: int = 99
+
+class EtapeUpdate(BaseModel):
+    nom: str | None = None
+    description: str | None = None
+    seuil_minutes: int | None = None
+    ordre: int | None = None
+    is_active: bool | None = None
+
+
+@router.get("/etapes")
+def list_etapes(db: Session = Depends(get_db)):
+    """Retourne toutes les étapes triées par ordre d'affichage."""
+    etapes = db.query(EtapeConfig).order_by(EtapeConfig.ordre).all()
+    return [
+        {
+            "id":             e.id,
+            "ordre":          e.ordre,
+            "code":           e.code,
+            "nom":            e.nom,
+            "description":    e.description,
+            "seuil_minutes":  e.seuil_minutes,
+            "poste_ref":      e.poste_ref,
+            "is_active":      e.is_active,
+            "is_default":     e.is_default,
+            "is_custom":      e.is_custom,
+        }
+        for e in etapes
+    ]
+
+
+@router.post("/etapes", status_code=201)
+def create_etape(payload: EtapeCreate, db: Session = Depends(get_db)):
+    """Crée une nouvelle étape personnalisée (superviseur)."""
+    import re, uuid
+    code = "custom_" + re.sub(r"[^a-z0-9]", "_", payload.nom.lower())[:30] + "_" + uuid.uuid4().hex[:4]
+    etape = EtapeConfig(
+        ordre=payload.ordre,
+        code=code,
+        nom=payload.nom,
+        description=payload.description,
+        seuil_minutes=payload.seuil_minutes,
+        is_default=False,
+        is_custom=True,
+    )
+    db.add(etape)
+    db.commit()
+    db.refresh(etape)
+    return {"id": etape.id, "code": etape.code, "nom": etape.nom,
+            "seuil_minutes": etape.seuil_minutes, "is_custom": True}
+
+
+@router.put("/etapes/{etape_id}")
+def update_etape(etape_id: int, payload: EtapeUpdate, db: Session = Depends(get_db)):
+    """Met à jour une étape (nom, description, seuil, ordre). Toutes les étapes sont modifiables."""
+    etape = db.query(EtapeConfig).filter(EtapeConfig.id == etape_id).first()
+    if not etape:
+        raise HTTPException(status_code=404, detail="Étape introuvable")
+    if payload.nom is not None:          etape.nom = payload.nom
+    if payload.description is not None:  etape.description = payload.description
+    if payload.seuil_minutes is not None: etape.seuil_minutes = payload.seuil_minutes
+    if payload.ordre is not None:        etape.ordre = payload.ordre
+    if payload.is_active is not None:    etape.is_active = payload.is_active
+    db.commit()
+    return {"status": "ok", "id": etape.id, "nom": etape.nom, "seuil_minutes": etape.seuil_minutes}
+
+
+@router.delete("/etapes/{etape_id}")
+def delete_etape(etape_id: int, db: Session = Depends(get_db)):
+    """Supprime une étape personnalisée. Les étapes par défaut sont protégées."""
+    etape = db.query(EtapeConfig).filter(EtapeConfig.id == etape_id).first()
+    if not etape:
+        raise HTTPException(status_code=404, detail="Étape introuvable")
+    if etape.is_default:
+        raise HTTPException(status_code=403, detail="Les étapes par défaut ne peuvent pas être supprimées")
+    db.delete(etape)
+    db.commit()
+    return {"status": "ok", "message": f"Étape '{etape.nom}' supprimée"}

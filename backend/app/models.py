@@ -145,3 +145,30 @@ class Cycle(Base):
     def immatriculation(self) -> str:
         """Permet de récupérer directement l'immatriculation pour le schéma CycleRead."""
         return self.truck.immatriculation if self.truck else ""
+
+
+# ============================================================
+# Étapes du processus — configurables par le superviseur
+# ============================================================
+class EtapeConfig(Base):
+    """
+    Configuration dynamique des étapes du processus camion.
+    Le superviseur peut ajouter, renommer, ou désactiver des étapes.
+    is_default=True : étape standard (ne peut pas être supprimée, seulement modifiée).
+    is_custom=True  : étape ajoutée par le superviseur (peut être supprimée).
+    """
+    __tablename__ = "etape_configs"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    ordre       = Column(Integer, nullable=False, default=0)          # ordre d'affichage
+    code        = Column(String(50), unique=True, nullable=False)      # identifiant interne
+    nom         = Column(String(100), nullable=False)                  # label affiché
+    description = Column(String(255), nullable=True)                   # description courte
+    seuil_minutes = Column(Integer, default=30, nullable=False)       # durée max (minutes)
+    poste_ref   = Column(String(50), nullable=True)                   # lien optionnel à PosteType
+    is_active   = Column(Boolean, default=True)
+    is_default  = Column(Boolean, default=False)                      # étape système non supprimable
+    is_custom   = Column(Boolean, default=False)                      # étape ajoutée par superviseur
+    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+

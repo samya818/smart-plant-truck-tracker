@@ -52,8 +52,25 @@ async def lifespan(app: FastAPI):
             db.add_all(defaults)
             db.commit()
             print("[Startup] Configuration initiale des 4 postes (Bi-Mode) insérée")
+
+        # Seed des étapes du processus officiel (modifiables par superviseur)
+        from app.models import EtapeConfig
+        if db.query(EtapeConfig).count() == 0:
+            etapes = [
+                EtapeConfig(ordre=1, code="porte_entree",   nom="① Porte Usine — Entrée",              description="Contrôle, badge, sécurité",                    seuil_minutes=10,  poste_ref="porte_usine", is_default=True),
+                EtapeConfig(ordre=2, code="parking",        nom="② Parking",                           description="Zone d'attente avant pesage",                  seuil_minutes=30,  poste_ref="parking",     is_default=True),
+                EtapeConfig(ordre=3, code="bascule_tare",   nom="③ Agence Logistique — Tare",          description="1er passage bascule · Pesage à vide",          seuil_minutes=15,  poste_ref="bascule",     is_default=True),
+                EtapeConfig(ordre=4, code="ensachage",      nom="④ Expéditions / Ensachage",           description="Chargement du camion (sacs de ciment)",        seuil_minutes=45,  poste_ref="ensachage",   is_default=True),
+                EtapeConfig(ordre=5, code="bascule_brut",   nom="③ Agence Logistique — Brut (retour)", description="2ème passage bascule · Pesage plein",           seuil_minutes=10,  poste_ref="bascule",     is_default=True),
+                EtapeConfig(ordre=6, code="porte_sortie",   nom="⑤ Porte Usine — Sortie",             description="Sortie avec bon de livraison",                 seuil_minutes=10,  poste_ref="porte_usine", is_default=True),
+                EtapeConfig(ordre=7, code="cycle_total",    nom="⑤ Cycle Total (① → ⑤)",              description="Durée totale autorisée · entrée→sortie usine", seuil_minutes=120, poste_ref=None,          is_default=True),
+            ]
+            db.add_all(etapes)
+            db.commit()
+            print("[Startup] 7 étapes du processus officiel insérées")
     finally:
         db.close()
+
 
 
     if settings.cv_mode == "simulation":
