@@ -59,16 +59,9 @@ def get_stats(db: Session = Depends(get_db)):
     seuil_total = cfg_porte.seuil_attente_max if cfg_porte else settings.seuil_cycle_total_max
     seuil_alerte = datetime.utcnow() - timedelta(minutes=seuil_total)
 
-    premiers_events = db.query(
-        Event.truck_id,
-        func.min(Event.horodatage).label("premier_ev")
-    ).filter(
-        Event.horodatage >= depuis_24h
-    ).group_by(Event.truck_id).subquery()
-
-    alertes = db.query(func.count()).select_from(premiers_events).filter(
-        premiers_events.c.premier_ev <= seuil_alerte,
-        ~premiers_events.c.truck_id.in_(db.query(trucks_sortis))
+    alertes = db.query(func.count(Cycle.id)).filter(
+        Cycle.status == TruckStatus.EN_COURS,
+        Cycle.entree_porte <= seuil_alerte
     ).scalar() or 0
 
     # ── Poste bloquant & cause de retard ──────────────────────────────────────
