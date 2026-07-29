@@ -1,7 +1,7 @@
 """Router API pour les statistiques du dashboard."""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, distinct
+from sqlalchemy import func, distinct
 from datetime import datetime, timedelta, timezone
 from typing import Dict
 from pydantic import BaseModel
@@ -91,20 +91,11 @@ def get_stats(db: Session = Depends(get_db)):
     depuis_24h = datetime.utcnow() - timedelta(hours=24)
 
     # ── Camions en cours ──────────────────────────────────────────────────────
-    # Trucks ayant eu un événement dans les 24h ET sans événement porte_usine/sortie
-    trucks_24h = db.query(distinct(Event.truck_id)).filter(
-        Event.horodatage >= depuis_24h
-    ).subquery()
-
-    trucks_sortis = db.query(distinct(Event.truck_id)).filter(
-        Event.horodatage >= depuis_24h,
-        Event.poste == PosteType.PORTE_USINE,
-        Event.type_event == "sortie"
-    ).subquery()
-
-    camions_en_cours = db.query(func.count(distinct(Event.truck_id))).filter(
-        Event.horodatage >= depuis_24h,
-        ~Event.truck_id.in_(db.query(trucks_sortis))
+    # Source de vérité : table cycles (status = EN_COURS, entree_porte < 24h)
+    # Identique à la logique de /api/events/active pour garantir la cohérence
+    camions_en_cours = db.query(func.count(distinct(Cycle.truck_id))).filter(
+        Cycle.status == TruckStatus.EN_COURS,
+        Cycle.entree_porte >= depuis_24h
     ).scalar() or 0
 
     # ── Aujourd'hui ───────────────────────────────────────────────────────────
@@ -127,22 +118,15 @@ def get_stats(db: Session = Depends(get_db)):
     )
 
     # ── Alertes actives ───────────────────────────────────────────────────────
-    # Trucks en cours (sans sortie) dont le premier événement 24h > 120 min
+    # Cycles EN_COURS dont l'entrée porte dépasse le seuil max configuré
     from app.config import get_settings
     settings = get_settings()
     seuil_alerte = datetime.utcnow() - timedelta(minutes=settings.seuil_cycle_total_max)
 
-    # Premier événement de chaque truck dans les 24h
-    premiers_events = db.query(
-        Event.truck_id,
-        func.min(Event.horodatage).label("premier_ev")
-    ).filter(
-        Event.horodatage >= depuis_24h
-    ).group_by(Event.truck_id).subquery()
-
-    alertes = db.query(func.count()).select_from(premiers_events).filter(
-        premiers_events.c.premier_ev <= seuil_alerte,
-        ~premiers_events.c.truck_id.in_(db.query(trucks_sortis))
+    alertes = db.query(func.count(distinct(Cycle.truck_id))).filter(
+        Cycle.status == TruckStatus.EN_COURS,
+        Cycle.entree_porte >= depuis_24h,
+        Cycle.entree_porte <= seuil_alerte
     ).scalar() or 0
 
     # ── Poste bloquant & cause de retard ──────────────────────────────────────
