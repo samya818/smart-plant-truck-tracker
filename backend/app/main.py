@@ -12,9 +12,10 @@ import json
 from app.config import get_settings
 from app.database import engine
 from app.models import Base
-from app.routers import trucks, events, analytics, dashboard, delays, mobile
+from app.routers import trucks, events, analytics, dashboard, delays, mobile, admin
 from app.services.cv_service import CVService
 from app.services.auto_train import AutoTrainPipeline
+
 
 settings = get_settings()
 
@@ -106,6 +107,7 @@ app.include_router(analytics.router)
 app.include_router(dashboard.router)
 app.include_router(delays.router)
 app.include_router(mobile.router)
+app.include_router(admin.router)
 
 import os
 os.makedirs(settings.upload_dir, exist_ok=True)

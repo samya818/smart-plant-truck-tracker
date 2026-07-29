@@ -54,7 +54,12 @@ class AutoTrainPipeline:
     def run_training_pipeline(self) -> Dict[str, Any]:
         print(f"[AutoTrain] Démarrage — {datetime.now()}")
 
-        db = SessionLocal()
+        try:
+            db = SessionLocal()
+        except Exception as e:
+            print(f"[AutoTrain] DB connection failed: {e}")
+            return {"status": "db_error", "reason": str(e)}
+
         try:
             # 1. CHARGEMENT
             depuis = datetime.utcnow() - timedelta(days=90)
@@ -159,6 +164,10 @@ class AutoTrainPipeline:
 
         finally:
             db.close()
+
+    def run(self) -> Dict[str, Any]:
+        """Alias for manual / CLI invocation."""
+        return self.run_training_pipeline()
 
     def _save_model(self, filename, model, mae, n_samples):
         artifact = {
