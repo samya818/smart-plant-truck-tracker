@@ -93,14 +93,14 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost"],
+    allow_origins=["*"],  # ⚠️ Développement uniquement
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 app.include_router(trucks.router)
 app.include_router(events.router)
 app.include_router(analytics.router)
