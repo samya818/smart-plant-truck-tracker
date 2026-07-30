@@ -44,7 +44,7 @@ Sans système de suivi, le superviseur n'a **aucune visibilité** sur :
 *Vue d'ensemble temps réel : camions en cours, KPIs, alertes, et poste bloquant*
 
 ### 📊 Statistiques et Analytiques
-![Statistiques](images/statistiques.png)
+![Statistiques](images/statistiques%20.png)
 *Analyse détaillée des retards par zone, transporteurs, et causes*
 
 ### 📱 Interface Mobile Agent
