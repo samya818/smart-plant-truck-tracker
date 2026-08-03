@@ -60,12 +60,9 @@ def get_durees_moyennes(db: Session = Depends(get_db)):
 @router.get("/stats-retards-services")
 def get_stats_retards_services(db: Session = Depends(get_db)):
     """
-    Statistiques ultra-détaillées des retards par service / zone :
-    - Décomposition sur les 5 étapes métier (Parking, Bascule Tare, Ensachage, Bascule Brut, Porte)
-    - Taux d'anomalies / retards (%) par zone
-    - Volume de camions traités
-    - Temps total perdu cumulé (heures/minutes)
-    - Recommandations d'action automatique par zone
+    Statistiques des retards par service / zone :
+    Décomposition sur les 4 étapes principales (Parking, Bascule Tare, Ensachage, Bascule Brut)
+    avec calcul des dépassements en minutes et du taux de retards.
     """
     depuis = datetime.utcnow() - timedelta(days=30)
     cycles = db.query(Cycle).filter(
@@ -95,13 +92,11 @@ def get_stats_retards_services(db: Session = Depends(get_db)):
     avg_b_brut = avg([c.duree_bascule_brut for c in cycles]) or 10.0
     retards_b_brut = count_retards([c.duree_bascule_brut for c in cycles], settings.seuil_bascule_max)
 
-    # Dépassements moyens
+    # Dépassements moyens (en minutes par camion)
     dep_parking = max(0.0, avg_parking - settings.seuil_attente_parking_max)
     dep_b_tare = max(0.0, avg_b_tare - settings.seuil_bascule_max)
     dep_ensachage = max(0.0, avg_ensachage - settings.seuil_ensachage_max)
     dep_b_brut = max(0.0, avg_b_brut - settings.seuil_bascule_max)
-
-    total_depassement = dep_parking + dep_b_tare + dep_ensachage + dep_b_brut or 1.0
 
     # Causes déclarées par poste
     events_retard = db.query(
@@ -130,14 +125,16 @@ def get_stats_retards_services(db: Session = Depends(get_db)):
             "etape": "Étape ②",
             "nom": "Parking Usine",
             "action": "Attente avant pesage",
+            # (a) Temps moyen réel passé au parking par camion (b) Formule: sum(duree_parking) / nb_cycles
             "temps_moyen": avg_parking,
+            # (a) Seuil maximal toléré configuré (b) Formule: settings.seuil_attente_parking_max
             "seuil_max": settings.seuil_attente_parking_max,
+            # (a) Minutes excédentaires moyennes par camion (b) Formule: max(0, temps_moyen - seuil_max)
             "depassement": round(dep_parking, 1),
+            # (a) Pourcentage de camions ayant dépassé le seuil au parking (b) Formule: (nb_camions_retard_parking / total_cycles) * 100
             "taux_retard_pct": round((retards_parking / nb_total) * 100, 1),
-            "part_retard_global_pct": round((dep_parking / total_depassement) * 100, 1),
+            # (a) Estimation du temps perdu cumulé par tous les camions (b) Formule: depassement_moyen * total_cycles
             "temps_perdu_total_min": round(dep_parking * nb_total, 0),
-            "statut": "critique" if avg_parking > settings.seuil_attente_parking_max else "normal",
-            "recommandation": "Fluidifier le flux d'appel des camions au pont-bascule" if dep_parking > 0 else "Flux d'attente optimal",
             "causes": causes_par_poste.get("parking", [])
         },
         {
@@ -145,14 +142,16 @@ def get_stats_retards_services(db: Session = Depends(get_db)):
             "etape": "Étape ③ (1er passage)",
             "nom": "Agence Logistique (Tare)",
             "action": "Pesage à vide du camion",
+            # (a) Temps moyen réel de pesée à vide (b) Formule: sum(duree_bascule_tare) / nb_cycles
             "temps_moyen": avg_b_tare,
+            # (a) Seuil maximal toléré configuré (b) Formule: settings.seuil_bascule_max
             "seuil_max": settings.seuil_bascule_max,
+            # (a) Minutes excédentaires moyennes à la pesée tare (b) Formule: max(0, temps_moyen - seuil_max)
             "depassement": round(dep_b_tare, 1),
+            # (a) Pourcentage de camions ayant dépassé le seuil en bascule tare (b) Formule: (nb_camions_retard_tare / total_cycles) * 100
             "taux_retard_pct": round((retards_b_tare / nb_total) * 100, 1),
-            "part_retard_global_pct": round((dep_b_tare / total_depassement) * 100, 1),
+            # (a) Temps perdu total cumulé à la pesée tare (b) Formule: depassement_moyen * total_cycles
             "temps_perdu_total_min": round(dep_b_tare * nb_total, 0),
-            "statut": "critique" if avg_b_tare > settings.seuil_bascule_max else "normal",
-            "recommandation": "Vérifier la rapidité de lecture OCR & validation des badges" if dep_b_tare > 0 else "Cadence de pesée conforme",
             "causes": causes_par_poste.get("bascule", [])
         },
         {
@@ -160,14 +159,16 @@ def get_stats_retards_services(db: Session = Depends(get_db)):
             "etape": "Étape ④",
             "nom": "Expéditions / Ensachage",
             "action": "Chargement des sacs de ciment",
+            # (a) Temps moyen réel de chargement sous ensacheuse (b) Formule: sum(duree_ensachage) / nb_cycles
             "temps_moyen": avg_ensachage,
+            # (a) Seuil maximal toléré configuré (b) Formule: settings.seuil_ensachage_max
             "seuil_max": settings.seuil_ensachage_max,
+            # (a) Minutes excédentaires moyennes au chargement (b) Formule: max(0, temps_moyen - seuil_max)
             "depassement": round(dep_ensachage, 1),
+            # (a) Pourcentage de camions ayant dépassé le seuil à l'ensachage (b) Formule: (nb_camions_retard_ensachage / total_cycles) * 100
             "taux_retard_pct": round((retards_ensachage / nb_total) * 100, 1),
-            "part_retard_global_pct": round((dep_ensachage / total_depassement) * 100, 1),
+            # (a) Temps perdu total cumulé à l'ensachage (b) Formule: depassement_moyen * total_cycles
             "temps_perdu_total_min": round(dep_ensachage * nb_total, 0),
-            "statut": "critique" if avg_ensachage > settings.seuil_ensachage_max else "normal",
-            "recommandation": "Contrôler la disponibilité des lignes de palettisation/ensachage" if dep_ensachage > 0 else "Chargement fluide",
             "causes": causes_par_poste.get("ensachage", [])
         },
         {
@@ -175,14 +176,16 @@ def get_stats_retards_services(db: Session = Depends(get_db)):
             "etape": "Étape ③↩ (2ème passage)",
             "nom": "Agence Logistique (Brut)",
             "action": "Pesage camion plein & contrôle final",
+            # (a) Temps moyen réel de pesée retour camion chargé (b) Formule: sum(duree_bascule_brut) / nb_cycles
             "temps_moyen": avg_b_brut,
+            # (a) Seuil maximal toléré configuré (b) Formule: settings.seuil_bascule_max
             "seuil_max": settings.seuil_bascule_max,
+            # (a) Minutes excédentaires moyennes à la pesée brut (b) Formule: max(0, temps_moyen - seuil_max)
             "depassement": round(dep_b_brut, 1),
+            # (a) Pourcentage de camions ayant dépassé le seuil en bascule brut (b) Formule: (nb_camions_retard_brut / total_cycles) * 100
             "taux_retard_pct": round((retards_b_brut / nb_total) * 100, 1),
-            "part_retard_global_pct": round((dep_b_brut / total_depassement) * 100, 1),
+            # (a) Temps perdu total cumulé à la pesée brut (b) Formule: depassement_moyen * total_cycles
             "temps_perdu_total_min": round(dep_b_brut * nb_total, 0),
-            "statut": "critique" if avg_b_brut > settings.seuil_bascule_max else "normal",
-            "recommandation": "Accélérer l'impression du bon de livraison et la sortie" if dep_b_brut > 0 else "Pesée retour conforme",
             "causes": [c for c in causes_par_poste.get("bascule", []) if "brut" in c["cause"].lower() or "bon" in c["cause"].lower()]
         }
     ]
@@ -192,8 +195,14 @@ def get_stats_retards_services(db: Session = Depends(get_db)):
 
     return {
         "zones": zones,
+
+        # (a) Nombre total de cycles de camions examinés (b) Formule: len(cycles_termines_30j)
         "nb_cycles_analyses": len(cycles),
+
+        # (a) Zone avec le plus fort dépassement en minutes (b) Formule: max(zones, key=depassement)["nom"]
         "zone_la_plus_bloquante": zone_bloquante["nom"],
+
+        # (a) Total des heures perdues excédentaires sur le site (b) Formule: sum(temps_perdu_total_min) / 60
         "total_temps_perdu_heures": round(sum(z["temps_perdu_total_min"] for z in zones) / 60, 1)
     }
 
@@ -211,28 +220,43 @@ def get_rapport(
 
     if periode == "aujourd_hui":
         date_debut = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        date_debut_prev = date_debut - timedelta(days=1)
+        date_fin_prev = now - timedelta(days=1)
         periode_label = "Aujourd'hui"
     elif periode == "semaine":
         date_debut = now - timedelta(days=7)
+        date_debut_prev = date_debut - timedelta(days=7)
+        date_fin_prev = date_debut
         periode_label = "7 derniers jours"
     else:
         date_debut = now - timedelta(days=30)
+        date_debut_prev = date_debut - timedelta(days=30)
+        date_fin_prev = date_debut
         periode_label = "30 derniers jours"
 
     date_fin = now
 
-    # ── Cycles ────────────────────────────────────────────────────────────
+    # ── Cycles période actuelle ───────────────────────────────────────────
     cycles_all = db.query(Cycle).filter(Cycle.entree_porte >= date_debut).all()
     cycles_termines = [c for c in cycles_all if c.status == TruckStatus.TERMINE]
     cycles_en_cours = [c for c in cycles_all if c.status == TruckStatus.EN_COURS]
     cycles_anomalie = [c for c in cycles_all if c.est_anomalie]
 
+    # ── Cycles période précédente (pour comparaison de tendance) ──────────
+    cycles_prev_termines = db.query(Cycle).filter(
+        Cycle.status == TruckStatus.TERMINE,
+        Cycle.entree_porte >= date_debut_prev,
+        Cycle.entree_porte < date_fin_prev
+    ).all()
+
     nb_total = len(cycles_all)
     nb_termines = len(cycles_termines)
     nb_anomalie = len(cycles_anomalie)
+
+    # (a) Taux de cycles ayant rencontré au moins une anomalie (b) Formule: (nb_anomalies / nb_total_cycles) * 100
     taux_anomalie = round((nb_anomalie / nb_total * 100), 1) if nb_total > 0 else 0.0
 
-    # ── Temps de cycle ────────────────────────────────────────────────────
+    # ── Temps de cycle (avec Percentiles P25/P75 au lieu du Min/Max) ───────
     def safe_avg(lst):
         vals = [v for v in lst if v and v > 0]
         return round(sum(vals) / len(vals), 1) if vals else 0.0
@@ -241,11 +265,76 @@ def get_rapport(
         vals = [v for v in lst if v and v > 0]
         return round(statistics.median(vals), 1) if vals else 0.0
 
+    def safe_quantile(lst, q):
+        vals = sorted([v for v in lst if v and v > 0])
+        if not vals:
+            return 0.0
+        if len(vals) == 1:
+            return round(vals[0], 1)
+        idx = (len(vals) - 1) * q
+        floor_idx = int(idx)
+        ceil_idx = floor_idx + 1 if floor_idx + 1 < len(vals) else floor_idx
+        res = vals[floor_idx] + (vals[ceil_idx] - vals[floor_idx]) * (idx - floor_idx)
+        return round(res, 1)
+
     durees_total = [c.duree_total for c in cycles_termines if c.duree_total and c.duree_total > 0]
+    durees_total_prev = [c.duree_total for c in cycles_prev_termines if c.duree_total and c.duree_total > 0]
+
+    # (a) Temps moyen de séjour usine sur la période actuelle (b) Formule: sum(duree_total) / nb_termines
     temps_moyen = safe_avg(durees_total)
+
+    # (a) Temps moyen sur la période précédente équivalente (b) Formule: sum(duree_total_prev) / nb_prev_termines
+    temps_moyen_prev = safe_avg(durees_total_prev)
+
+    # (a) Variation en % par rapport à la période précédente (b) Formule: ((temps_actuel - temps_prev) / temps_prev) * 100
+    variation_pct = 0.0
+    if temps_moyen_prev > 0:
+        variation_pct = round(((temps_moyen - temps_moyen_prev) / temps_moyen_prev) * 100, 1)
+
+    tendance = "stable"
+    if variation_pct > 2.0:
+        tendance = "hausse"
+    elif variation_pct < -2.0:
+        tendance = "baisse"
+
+    # (a) Médiane (50% des camions passent sous ce temps) (b) Formule: median(duree_total)
     temps_median = safe_median(durees_total)
-    temps_min = round(min(durees_total), 1) if durees_total else 0.0
-    temps_max = round(max(durees_total), 1) if durees_total else 0.0
+
+    # (a) Premier quartile P25 (25% des camions les plus rapides) (b) Formule: quantile(duree_total, 0.25)
+    temps_p25 = safe_quantile(durees_total, 0.25)
+
+    # (a) Troisième quartile P75 (75% des camions, limite des 25% les plus lents) (b) Formule: quantile(duree_total, 0.75)
+    temps_p75 = safe_quantile(durees_total, 0.75)
+
+    # ── Liste brute des camions actuellement bloqués ────────────────────────
+    camions_bloques_actuellement = []
+    for c in cycles_en_cours:
+        last_event = db.query(Event).filter(
+            Event.truck_id == c.truck_id,
+            Event.horodatage >= c.entree_porte
+        ).order_by(Event.horodatage.desc()).first()
+
+        poste_actuel = last_event.poste.value if last_event and hasattr(last_event.poste, "value") else (last_event.poste if last_event else "porte_usine")
+        dernier_passage = last_event.horodatage if last_event else c.entree_porte
+        if dernier_passage and dernier_passage.tzinfo:
+            dernier_passage = dernier_passage.replace(tzinfo=None)
+
+        minutes_attente = round((now - dernier_passage).total_seconds() / 60, 1) if dernier_passage else 0.0
+
+        camions_bloques_actuellement.append({
+            "truck_id": c.truck_id,
+            # (a) Immatriculation du camion en usine (b) Formule: truck.immatriculation
+            "immatriculation": c.truck.immatriculation if c.truck else "Inconnu",
+            # (a) Dernier poste atteint par le camion (b) Formule: dernier Event.poste
+            "poste_actuel": poste_actuel,
+            # (a) Minutes écoulées depuis l'entrée dans le poste (b) Formule: (maintenant - horodatage_dernier_event)
+            "minutes_attente_poste": minutes_attente,
+            # (a) Heure d'entrée en usine (b) Formule: cycle.entree_porte
+            "entree_porte": c.entree_porte.isoformat() if c.entree_porte else None,
+        })
+
+    # Tri par temps d'attente au poste le plus élevé d'abord
+    camions_bloques_actuellement.sort(key=lambda x: x["minutes_attente_poste"], reverse=True)
 
     # ── Durées par zone ───────────────────────────────────────────────────
     seuils = {
@@ -420,11 +509,22 @@ def get_rapport(
         "nb_cycles_termines": nb_termines,
         "nb_cycles_en_cours": len(cycles_en_cours),
         "nb_cycles_anomalie": nb_anomalie,
+        # (a) Pourcentage de camions avec anomalie (b) Formule: (nb_anomalie / nb_cycles_total) * 100
         "taux_anomalie_pct": taux_anomalie,
+        # (a) Temps moyen de séjour en usine (b) Formule: sum(durees) / nb_termines
         "temps_moyen_cycle_min": temps_moyen,
+        # (a) Pourcentage de variation du temps moyen vs période précédente (b) Formule: ((moyen - moyen_prev) / moyen_prev) * 100
+        "variation_pct": variation_pct,
+        # (a) Tendance par rapport à la période précédente (b) Formule: "hausse" if var > 2 else "baisse" if var < -2 else "stable"
+        "tendance": tendance,
+        # (a) Temps médian de séjour en usine (50% des camions sous cette durée) (b) Formule: median(durees)
         "temps_median_cycle_min": temps_median,
-        "temps_min_cycle_min": temps_min,
-        "temps_max_cycle_min": temps_max,
+        # (a) Premier quartile P25 (limite des 25% les plus rapides) (b) Formule: quantile(durees, 0.25)
+        "temps_p25_cycle_min": temps_p25,
+        # (a) Troisième quartile P75 (limite des 25% les plus lents) (b) Formule: quantile(durees, 0.75)
+        "temps_p75_cycle_min": temps_p75,
+        # (a) Liste brute triée des camions actuellement bloqués au poste avec durée (b) Formule: sort_desc(camions_en_cours, minutes_attente_poste)
+        "camions_bloques_actuellement": camions_bloques_actuellement,
         "durees_par_zone": durees_par_zone,
         "top_causes_retard": causes_detaillees,
         "repartition_source": repartition_source,

@@ -12,10 +12,7 @@ interface ZoneDetail {
   seuil_max: number;
   depassement: number;
   taux_retard_pct: number;
-  part_retard_global_pct: number;
   temps_perdu_total_min: number;
-  statut: 'critique' | 'normal';
-  recommandation: string;
   causes: { cause: string; occurrences: number; total_minutes: number }[];
 }
 
@@ -40,7 +37,7 @@ export function StatsChart() {
     'Temps Moyen Réel (min)': z.temps_moyen,
     'Seuil Toléré (min)': z.seuil_max,
     depassement: z.depassement,
-    statut: z.statut,
+    isCritique: z.depassement > 0,
   }));
 
   return (
@@ -98,7 +95,7 @@ export function StatsChart() {
                   {chartData.map((entry, index) => (
                     <Cell
                       key={`cell-${index}`}
-                      fill={entry.statut === 'critique' ? '#EF4444' : '#3B82F6'}
+                      fill={entry.isCritique ? '#EF4444' : '#3B82F6'}
                     />
                   ))}
                 </Bar>
@@ -144,13 +141,12 @@ export function StatsChart() {
 
       </div>
 
-      {/* ── 3. Tableau Détaillé par Zone avec Recommandations ───────────────── */}
+      {/* ── 3. Tableau Détaillé par Zone ───────────────── */}
       <div className="mt-6 border-t pt-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
-            <Info className="w-5 h-5 text-blue-600" /> Tableau Synthétique Détaillé par Étape & Recommandations
+            <Info className="w-5 h-5 text-blue-600" /> Tableau Synthétique Détaillé par Étape
           </h3>
-          <span className="text-xs text-gray-400">Recommandations générées automatiquement</span>
         </div>
 
         <div className="overflow-x-auto rounded-xl border border-gray-200">
@@ -162,13 +158,13 @@ export function StatsChart() {
                 <th className="p-3">Objectif Max</th>
                 <th className="p-3">Écart / Dépassement</th>
                 <th className="p-3">% Retard Camions</th>
-                <th className="p-3">💡 Recommandation Superviseur</th>
+                <th className="p-3">Temps Perdu Total (Est.)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-xs">
               {data.zones.map(z => (
                 <tr key={z.key} className={`hover:bg-slate-50/80 transition-colors ${
-                  z.statut === 'critique' ? 'bg-red-50/30' : ''
+                  z.depassement > 0 ? 'bg-red-50/30' : ''
                 }`}>
                   <td className="p-3">
                     <div className="font-bold text-gray-900">{z.nom}</div>
@@ -188,11 +184,8 @@ export function StatsChart() {
                     )}
                   </td>
                   <td className="p-3 font-semibold text-gray-700">{z.taux_retard_pct}%</td>
-                  <td className="p-3">
-                    <div className="flex items-center gap-1.5 text-gray-700 bg-white p-1.5 rounded-lg border text-[11px]">
-                      <Lightbulb className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                      <span>{z.recommandation}</span>
-                    </div>
+                  <td className="p-3 font-mono font-semibold text-gray-700">
+                    {z.temps_perdu_total_min} min
                   </td>
                 </tr>
               ))}

@@ -43,6 +43,14 @@ interface PerformanceTransporteur {
   cause_principale: string;
 }
 
+interface CamionBloque {
+  truck_id: number;
+  immatriculation: string;
+  poste_actuel: string;
+  minutes_attente_poste: number;
+  entree_porte: string | null;
+}
+
 interface RapportData {
   periode: Periode;
   periode_label: string;
@@ -54,9 +62,12 @@ interface RapportData {
   nb_cycles_anomalie: number;
   taux_anomalie_pct: number;
   temps_moyen_cycle_min: number;
+  variation_pct: number;
+  tendance: 'hausse' | 'baisse' | 'stable';
   temps_median_cycle_min: number;
-  temps_min_cycle_min: number;
-  temps_max_cycle_min: number;
+  temps_p25_cycle_min: number;
+  temps_p75_cycle_min: number;
+  camions_bloques_actuellement: CamionBloque[];
   durees_par_zone: ZoneDuree[];
   top_causes_retard: CauseRetard[];
   repartition_source: Record<string, number>;
@@ -186,15 +197,73 @@ export default function StatistiquesPage() {
           {/* ── 2. Temps de Cycle ── */}
           <section>
             <h2 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-3">
-              ⏱️ Analyse des Temps de Séjour en Usine
+              ⏱️ Analyse des Temps de Séjour en Usine & Distribution
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <TimeCard label="Temps Moyen" value={data.temps_moyen_cycle_min} seuil={120} icon={<Clock />} />
-              <TimeCard label="Temps Médian" value={data.temps_median_cycle_min} seuil={120} icon={<TrendingUp />} />
-              <TimeCard label="Temps Minimum" value={data.temps_min_cycle_min} seuil={120} icon={<TrendingDown />} positive />
-              <TimeCard label="Temps Maximum" value={data.temps_max_cycle_min} seuil={120} icon={<Zap />} />
+              <div className="rounded-2xl border p-4 bg-white border-gray-100 flex flex-col justify-between">
+                <div className="flex items-center justify-between text-xs font-semibold text-gray-500 mb-1">
+                  <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-blue-600" /> Temps Moyen</span>
+                  {data.variation_pct !== 0 && (
+                    <span className={`flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded text-[11px] ${
+                      data.tendance === 'baisse' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {data.tendance === 'baisse' ? <TrendingDown className="w-3 h-3" /> : <TrendingUp className="w-3 h-3" />}
+                      {data.variation_pct > 0 ? `+${data.variation_pct}%` : `${data.variation_pct}%`}
+                    </span>
+                  )}
+                </div>
+                <div className="text-2xl font-extrabold text-gray-800">
+                  {Math.round(data.temps_moyen_cycle_min)} <span className="text-sm font-normal text-gray-500">min</span>
+                </div>
+                <div className="text-[11px] text-gray-400 mt-0.5">vs période précédente</div>
+              </div>
+
+              <TimeCard label="Temps Médian (P50)" value={data.temps_median_cycle_min} seuil={120} icon={<Activity />} />
+              <TimeCard label="Premier Quartile (P25)" value={data.temps_p25_cycle_min} seuil={120} icon={<TrendingDown />} positive />
+              <TimeCard label="Troisième Quartile (P75)" value={data.temps_p75_cycle_min} seuil={120} icon={<TrendingUp />} />
             </div>
           </section>
+
+          {/* ── 2.5 Camions Bloqués Actuellement sur le Site ── */}
+          {data.camions_bloques_actuellement.length > 0 && (
+            <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  🚨 Camions Actuellement Bloqués sur le Site ({data.camions_bloques_actuellement.length})
+                </h3>
+                <span className="text-xs text-gray-400">Triés par temps d'attente au poste en cours</span>
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-xs text-left">
+                  <thead>
+                    <tr className="bg-slate-50 text-gray-500 font-semibold uppercase">
+                      <th className="p-3">Camion</th>
+                      <th className="p-3">Poste Actuel</th>
+                      <th className="p-3">Attente au Poste</th>
+                      <th className="p-3 text-right">Entrée Usine</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.camions_bloques_actuellement.map((c, i) => (
+                      <tr key={i} className={c.minutes_attente_poste > 30 ? 'bg-red-50/40' : 'hover:bg-slate-50/50'}>
+                        <td className="p-3 font-mono font-bold text-gray-800">{c.immatriculation}</td>
+                        <td className="p-3 font-medium text-gray-700 capitalize">{c.poste_actuel.replace('_', ' ')}</td>
+                        <td className="p-3 font-bold font-mono">
+                          <span className={c.minutes_attente_poste > 30 ? 'text-red-600 font-extrabold' : 'text-gray-700'}>
+                            {c.minutes_attente_poste} min
+                          </span>
+                        </td>
+                        <td className="p-3 text-right text-gray-400 font-mono">
+                          {c.entree_porte ? new Date(c.entree_porte).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* ── 3. Graphiques principaux ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
