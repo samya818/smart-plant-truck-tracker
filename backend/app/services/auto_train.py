@@ -1,6 +1,11 @@
 """
 Pipeline d'entraînement automatique — Prophet prioritaire + XGBoost expérimental.
 Champion = Prophet (production). Challenger XGBoost = toggle manuel uniquement.
+
+Règle de qualité des données :
+  - Cycles simulés (source = "simulation" sur l'Event d'entrée) → EXCLUS
+  - Cycles marqués est_anomalie=True → EXCLUS
+  Seuls des cycles réels, complets, non-anomaliques alimentent le modèle.
 """
 import asyncio
 import os
@@ -13,7 +18,7 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from app.database import SessionLocal
-from app.models import Cycle, TruckStatus
+from app.models import Cycle, TruckStatus, Event
 
 
 class AutoTrainPipeline:
@@ -61,16 +66,62 @@ class AutoTrainPipeline:
             return {"status": "db_error", "reason": str(e)}
 
         try:
-            # 1. CHARGEMENT
+            # 1. CHARGEMENT — données réelles uniquement
+            # Règle d'exclusion :
+            #   a) est_anomalie=True  → durée corrompue ou cycle non représentatif
+            #   b) source=simulation  → 6 plaques en boucle, pas de vraie diversité
+            #      (on détecte la source via l'event d'entrée PORTE_USINE du cycle)
             depuis = datetime.utcnow() - timedelta(days=90)
-            cycles = db.query(Cycle).filter(
+
+            # Sous-requête : IDs des cycles dont l'event d'entrée est de source simulation
+            from sqlalchemy import exists, and_
+            from app.models import PosteType
+
+            cycles_simules_ids = (
+                db.query(Cycle.id)
+                .join(
+                    Event,
+                    and_(
+                        Event.truck_id == Cycle.truck_id,
+                        Event.poste == PosteType.PORTE_USINE,
+                        Event.type_event == "entree",
+                        Event.horodatage >= Cycle.entree_porte,
+                        Event.source == "simulation",
+                    )
+                )
+                .subquery()
+            )
+
+            cycles_bruts = db.query(Cycle).filter(
                 Cycle.entree_porte >= depuis,
                 Cycle.status == TruckStatus.TERMINE,
-                Cycle.duree_total > 0
+                Cycle.duree_total > 0,
+                Cycle.est_anomalie == False,          # exclut cycles corrompus
+                ~Cycle.id.in_(cycles_simules_ids),    # exclut cycles simulés
             ).all()
 
+            n_total_termine = db.query(Cycle).filter(
+                Cycle.entree_porte >= depuis,
+                Cycle.status == TruckStatus.TERMINE,
+                Cycle.duree_total > 0,
+            ).count()
+            n_exclus = n_total_termine - len(cycles_bruts)
+
+            print(
+                f"[AutoTrain] {len(cycles_bruts)} cycles réels retenus "
+                f"({n_exclus} exclus : simulation ou anomalie)"
+            )
+
+            cycles = cycles_bruts
+
             if len(cycles) < 100:
-                return {"status": "skipped", "raison": f"{len(cycles)} < 100 cycles"}
+                return {
+                    "status": "skipped",
+                    "raison": (
+                        f"{len(cycles)} cycles réels < 100 minimum. "
+                        f"({n_exclus} cycles exclus car simulés/anomalies)"
+                    ),
+                }
 
             # 2. PRÉPARATION
             df = pd.DataFrame([{
@@ -156,7 +207,8 @@ class AutoTrainPipeline:
                 "champion": "prophet",
                 "mae": scores.get('prophet'),
                 "n_cycles": len(cycles),
-                "all_scores": scores
+                "n_exclus_simulation_anomalie": n_exclus,
+                "all_scores": scores,
             })
 
             print(f"[AutoTrain] Terminé — Scores: {scores}")

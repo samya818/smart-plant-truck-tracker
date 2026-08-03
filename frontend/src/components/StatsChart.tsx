@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts';
-import { ShieldAlert, Clock, AlertTriangle, CheckCircle2, Info, ArrowUpRight, Lightbulb } from 'lucide-react';
+import { ShieldAlert, Clock, AlertTriangle, CheckCircle2, Info, ArrowUpRight } from 'lucide-react';
 import { getStatsRetardsServices } from '@/services/api';
 
 interface ZoneDetail {

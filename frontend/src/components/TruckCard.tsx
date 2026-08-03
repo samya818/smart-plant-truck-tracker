@@ -160,7 +160,7 @@ function calcEtas(
 // ─── Composant principal ──────────────────────────────────────────────────────
 export function TruckCard({ immatriculation, events }: Props) {
   const [durees, setDurees] = useState<DureesMoyennes | null>(null);
-  const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  const apiBase = '';
 
   useEffect(() => {
     getDureesMoyennes().then(setDurees).catch(() => null);
@@ -213,7 +213,7 @@ export function TruckCard({ immatriculation, events }: Props) {
         <div className="flex items-center gap-2">
           {events.some(e => e.necesita_confirmacion) && (
             <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-bold border border-amber-300 animate-pulse" title="Confiance OCR < 65% - confirmation requise">
-              ⚠️ OCR faible (<65%) — À confirmer
+              ⚠️ OCR faible (&lt;65%) — À confirmer
             </span>
           )}
           {hasAnomalie && (

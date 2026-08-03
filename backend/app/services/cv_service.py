@@ -21,7 +21,7 @@ from typing import Optional
 
 from app.config import get_settings
 from app.database import SessionLocal
-from app.models import Truck, Event, Cycle, PosteType, PosteConfig
+from app.models import Truck, Event, Cycle, PosteType, PosteConfig, CaptureMode
 from app.services.event_ingestion import EventIngestionService
 
 settings = get_settings()
@@ -548,6 +548,11 @@ class CVService:
             random.randint(20, 60),
         ]
 
+        # Cache des modes de capture par poste (recharger toutes les 5 min)
+        poste_modes: dict[PosteType, CaptureMode] = {}
+        modes_loaded_at: float = 0.0
+        import time
+
         while True:
             state = self.sim_state[plaque]
             idx   = state["index"]
@@ -569,20 +574,57 @@ class CVService:
                     random.randint(20, 60),
                 ]
 
+            # ── Lecture du capture_mode depuis la DB (avec cache 5 min) ─────
+            now_ts = time.monotonic()
+            if now_ts - modes_loaded_at > 300:
+                db_cfg = SessionLocal()
+                try:
+                    configs = db_cfg.query(PosteConfig).all()
+                    poste_modes = {c.poste: c.capture_mode for c in configs}
+                    modes_loaded_at = now_ts
+                except Exception as e:
+                    print(f"[CV-Sim] Impossible de lire PosteConfig: {e}")
+                finally:
+                    db_cfg.close()
+
+            # ── capture_mode détermine si une confiance OCR est crédible ────
+            # AGENT  → pas de caméra du tout → pas de confiance_ocr
+            # CAMERA / HYBRID → caméra présente → confiance simulée
+            mode = poste_modes.get(poste, CaptureMode.AGENT)
+            if mode == CaptureMode.AGENT:
+                confiance = None
+                source_tag = "simulation_agent"
+            else:
+                confiance = round(random.uniform(0.75, 0.99), 2)
+                source_tag = "simulation"
+
             db = SessionLocal()
+            success = False
             try:
                 service = EventIngestionService(db)
                 service.ingest_event(
                     plaque=plaque,
                     poste=poste,
                     type_event=type_event,    # type: ignore
-                    source="simulation",
-                    confiance_ocr=round(random.uniform(0.75, 0.99), 2),
+                    source=source_tag,
+                    confiance_ocr=confiance,
                 )
-                print(f"[CV-Sim] {plaque} | {poste.value} | {type_event}")
+                print(
+                    f"[CV-Sim] {plaque} | {poste.value} | {type_event} "
+                    f"| mode={mode.value} | conf={confiance}"
+                )
+                success = True
             except Exception as e:
-                print(f"[CV-Sim] Erreur {plaque}: {e}")
+                # L'index N'AVANCE PAS en cas d'échec :
+                # évite les cycles orphelins (entrée porte non créée →
+                # auto-close à 3 min qui pollue temps_moyen_cycle)
+                print(
+                    f"[CV-Sim] ⚠️  Échec {plaque} @ {poste.value}/{type_event}: {e} "
+                    f"(index conservé à {idx})"
+                )
             finally:
                 db.close()
 
-            self.sim_state[plaque]["index"] = (idx + 1) % len(self.postes_cycle)
+            # Avance seulement si l'ingestion a réussi
+            if success:
+                self.sim_state[plaque]["index"] = (idx + 1) % len(self.postes_cycle)

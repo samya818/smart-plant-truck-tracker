@@ -1,7 +1,7 @@
 import type { Truck, Event, DashboardStats, Cycle, DelayCause, PosteConfig, DureesMoyennes } from '@/types';
 
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = '';
 async function apiFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${endpoint}`, {
     headers: { 'Content-Type': 'application/json' },

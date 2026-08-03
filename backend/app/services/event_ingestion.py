@@ -348,6 +348,12 @@ class EventIngestionService:
         def make_naive(dt):
             return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
 
+        # Réinitialiser toutes les durées avant recalcul
+        cycle.duree_parking = 0.0
+        cycle.duree_bascule_tare = 0.0
+        cycle.duree_ensachage = 0.0
+        cycle.duree_bascule_brut = 0.0
+
         entree_porte = make_naive(cycle.entree_porte)
         sortie_porte = make_naive(cycle.sortie_porte)
 
@@ -368,17 +374,23 @@ class EventIngestionService:
                 poste_times[(PosteType.PARKING, "entree")]
             ).total_seconds() / 60
 
-        # Bascule — 1er passage (tare) et 2ème (brut)
-        bascule_entries = [e for e in events if e.poste == PosteType.BASCULE and e.type_event == "entree"]
-        bascule_exits   = [e for e in events if e.poste == PosteType.BASCULE and e.type_event == "sortie"]
-        if len(bascule_entries) >= 1 and len(bascule_exits) >= 1:
-            cycle.duree_bascule_tare = (
-                make_naive(bascule_exits[0].horodatage) - make_naive(bascule_entries[0].horodatage)
-            ).total_seconds() / 60
-        if len(bascule_entries) >= 2 and len(bascule_exits) >= 2:
-            cycle.duree_bascule_brut = (
-                make_naive(bascule_exits[1].horodatage) - make_naive(bascule_entries[1].horodatage)
-            ).total_seconds() / 60
+        # Bascule — appariement strict des paires (entrée, sortie) séquentielle
+        bascule_events = [e for e in events if e.poste == PosteType.BASCULE]
+        bascule_pairs = []
+        last_entry = None
+        for be in bascule_events:
+            if be.type_event == "entree":
+                last_entry = be
+            elif be.type_event == "sortie" and last_entry is not None:
+                dur = (make_naive(be.horodatage) - make_naive(last_entry.horodatage)).total_seconds() / 60
+                if 0 <= dur <= 60:  # Durée de pesée valide (max 60 min)
+                    bascule_pairs.append(dur)
+                last_entry = None
+
+        if len(bascule_pairs) >= 1:
+            cycle.duree_bascule_tare = round(bascule_pairs[0], 1)
+        if len(bascule_pairs) >= 2:
+            cycle.duree_bascule_brut = round(bascule_pairs[1], 1)
 
         # Ensachage
         if (PosteType.ENSACHAGE, "entree") in poste_times and (PosteType.ENSACHAGE, "sortie") in poste_times:

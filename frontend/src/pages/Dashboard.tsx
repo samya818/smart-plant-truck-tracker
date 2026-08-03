@@ -8,7 +8,11 @@ import { StatsChart } from '@/components/StatsChart';
 import type { DashboardStats, Event, PosteConfig } from '@/types';
 import { Edit2, Check, X, Camera, Smartphone, RefreshCw, BarChart2, Timer, Save } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE = '';
+const getWsUrl = () => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/live`;
+};
 
 interface AnomalieItem {
   cycle_id: number;
@@ -20,7 +24,6 @@ interface AnomalieItem {
   auto_closed: boolean;
   gap_applique: number | null;
 }
-
 
 interface Etape {
   id: number;
@@ -36,9 +39,6 @@ interface Etape {
 }
 
 const STEP_COLORS = ['bg-slate-400','bg-blue-500','bg-purple-500','bg-orange-500','bg-purple-400','bg-slate-500','bg-red-500'];
-
-
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/live';
 
 const posteLabels: Record<string, string> = {
   porte_usine: 'Porte Usine', parking: 'Parking',
@@ -76,7 +76,7 @@ export default function Dashboard() {
     expires: AnomalieItem[];
     total_alertes: number;
   } | null>(null);
-  const { lastMessage, isConnected } = useWebSocket(WS_URL);
+  const { lastMessage, isConnected } = useWebSocket(getWsUrl());
 
   const loadEtapes = useCallback(async () => {
     try {

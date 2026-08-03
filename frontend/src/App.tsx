@@ -1,8 +1,39 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import Dashboard from '@/pages/Dashboard';
 import MobilePage from '@/pages/MobilePage';
 import StatistiquesPage from '@/pages/StatistiquesPage';
-import { LayoutDashboard, Smartphone, BarChart2 } from 'lucide-react';
+import ConfirmationPage from '@/pages/ConfirmationPage';
+import { LayoutDashboard, Smartphone, BarChart2, ShieldCheck } from 'lucide-react';
+
+const API_BASE = '';
+
+/** Badge rouge animé affiché sur le lien "Confirmation" quand des events sont en attente. */
+function PendingBadge() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/events/pending-confirmation/count`);
+        if (res.ok) {
+          const data = await res.json();
+          setCount(data.count ?? 0);
+        }
+      } catch { /* silencieux */ }
+    };
+    poll();
+    const id = setInterval(poll, 20_000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (count === 0) return null;
+  return (
+    <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-extrabold animate-pulse">
+      {count > 9 ? '9+' : count}
+    </span>
+  );
+}
 
 export default function App() {
   return (
@@ -66,6 +97,22 @@ export default function App() {
               <Smartphone className="w-4 h-4" />
               Interface Mobile
             </NavLink>
+
+            {/* ── Lien Confirmation OCR avec badge ── */}
+            <NavLink
+              to="/confirmation"
+              className={({ isActive }) =>
+                `flex items-center gap-2 px-4 py-4 text-sm font-semibold border-b-2 transition-all duration-150 ${
+                  isActive
+                    ? 'border-amber-600 text-amber-700 bg-amber-50/50'
+                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                }`
+              }
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Confirmation OCR
+              <PendingBadge />
+            </NavLink>
           </div>
         </nav>
 
@@ -75,6 +122,7 @@ export default function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/statistiques" element={<StatistiquesPage />} />
             <Route path="/mobile" element={<MobilePage />} />
+            <Route path="/confirmation" element={<ConfirmationPage />} />
           </Routes>
         </main>
       </div>
