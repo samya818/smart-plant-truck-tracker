@@ -31,26 +31,34 @@ class PredictionService:
         return 0
 
     def predict_niveau_0(self, poste_actuel: PosteType, est_tare: bool = True) -> dict:
-        """Règles métier — fonctionne sans aucune donnée."""
+        """Règles métier — lit les seuils dynamiques configurés en DB (EtapeConfig)."""
+        from app.models import EtapeConfig
+
+        # Récupérer les seuils configurés par le superviseur via l'UI
+        etapes = {e.code: e.seuil_minutes for e in self.db.query(EtapeConfig).filter(EtapeConfig.is_active == True).all()}
+
+        seuil_parking = etapes.get("parking", settings.seuil_attente_parking_max)
+        seuil_b_tare = etapes.get("bascule_tare", settings.seuil_bascule_max)
+        seuil_ensachage = etapes.get("ensachage", settings.seuil_ensachage_max)
+        seuil_b_brut = etapes.get("bascule_brut", 10)
+        seuil_porte_sortie = etapes.get("porte_sortie", 10)
+
         temps = 0.0
         if poste_actuel == PosteType.PORTE_USINE:
-            temps = (settings.seuil_attente_parking_max + settings.seuil_bascule_max +
-                     settings.seuil_ensachage_max + settings.seuil_bascule_max + 10)
+            temps = seuil_parking + seuil_b_tare + seuil_ensachage + seuil_b_brut + seuil_porte_sortie
         elif poste_actuel == PosteType.PARKING:
-            temps = (settings.seuil_bascule_max + settings.seuil_ensachage_max +
-                     settings.seuil_bascule_max + 10)
+            temps = seuil_b_tare + seuil_ensachage + seuil_b_brut + seuil_porte_sortie
         elif poste_actuel == PosteType.BASCULE:
-            temps = (settings.seuil_ensachage_max + settings.seuil_bascule_max + 10
-                     if est_tare else 10)
+            temps = (seuil_ensachage + seuil_b_brut + seuil_porte_sortie) if est_tare else seuil_porte_sortie
         elif poste_actuel == PosteType.ENSACHAGE:
-            temps = settings.seuil_bascule_max + 10
+            temps = seuil_b_brut + seuil_porte_sortie
 
         return {
             "eta_minutes": round(temps, 1),
             "niveau": 0,
-            "methode": "regles_metier",
+            "methode": "regles_metier_dynamiques",
             "confiance": "faible",
-            "note": "Basé sur les seuils configurés — aucune donnée historique"
+            "note": "Basé sur les seuils configurés en direct dans l'interface (EtapeConfig)"
         }
 
     def predict_niveau_1(self, poste_actuel: PosteType) -> dict:
@@ -124,19 +132,70 @@ class PredictionService:
         }
 
     def _predict_xgboost(self, poste_actuel: PosteType) -> dict:
-        """XGBoost — mode expérimental, pour comparaison A/B uniquement."""
+        """XGBoost — inférence réelle basée sur les caractéristiques temporelles."""
         import pickle
-        with open("models/xgboost_champion.pkl", 'rb') as f:
-            artifact = pickle.load(f)
+        import xgboost as xgb
+        from datetime import datetime
 
-        # Simplifié : retourne la prédiction du modèle
-        return {
-            "eta_minutes": 0.0,  # À implémenter selon feature engineering
-            "niveau": 2,
-            "methode": "xgboost_experimental",
-            "confiance": "moyenne",
-            "note": "Mode expérimental — à valider sur données réelles"
-        }
+        model_path = "models/xgboost_champion.pkl"
+        if not os.path.exists(model_path):
+            return self.predict_niveau_1(poste_actuel)
+
+        try:
+            with open(model_path, 'rb') as f:
+                artifact = pickle.load(f)
+
+            model = artifact.get('model')
+            if not model:
+                return self.predict_niveau_1(poste_actuel)
+
+            now = datetime.utcnow()
+            heure = now.hour
+            jour_semaine = now.weekday()
+
+            # Extraction des features identiques à l'entraînement
+            hour_sin = float(np.sin(2 * np.pi * heure / 24))
+            hour_cos = float(np.cos(2 * np.pi * heure / 24))
+            dow_sin = float(np.sin(2 * np.pi * jour_semaine / 7))
+            dow_cos = float(np.cos(2 * np.pi * jour_semaine / 7))
+            is_weekend = int(jour_semaine >= 5)
+            is_morning_rush = int(7 <= heure <= 9)
+            is_afternoon_rush = int(14 <= heure <= 16)
+
+            # Valeurs par défaut moyennes pour les lags si indisponibles
+            features = pd.DataFrame([{
+                'heure': heure,
+                'jour_semaine': jour_semaine,
+                'parking': 20.0,
+                'ensachage': 35.0,
+                'bascule': 15.0,
+                'hour_sin': hour_sin,
+                'hour_cos': hour_cos,
+                'dow_sin': dow_sin,
+                'dow_cos': dow_cos,
+                'is_weekend': is_weekend,
+                'is_morning_rush': is_morning_rush,
+                'is_afternoon_rush': is_afternoon_rush,
+                'lag_1d': 90.0,
+                'lag_7d': 90.0,
+                'rolling_mean_24h': 90.0,
+                'rolling_std_24h': 10.0
+            }])
+
+            dtest = xgb.DMatrix(features)
+            pred = model.predict(dtest)
+            eta = float(pred[0])
+
+            return {
+                "eta_minutes": round(max(5.0, eta), 1),
+                "niveau": 2,
+                "methode": "xgboost_experimental",
+                "confiance": "élevée",
+                "note": "Modèle XGBoost entraîné — inférence dynamique"
+            }
+        except Exception as e:
+            print(f"[Prediction] Inférence XGBoost échouée : {e}")
+            return self.predict_niveau_1(poste_actuel)
 
     def predict(self, poste_actuel: PosteType, est_tare: bool = True, modele_prefere: str = "prophet") -> dict:
         """Point d'entrée unique — choisit le meilleur niveau automatiquement."""

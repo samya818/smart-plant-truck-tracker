@@ -76,7 +76,8 @@ async def create_event_mobile(
 ):
     """
     Point d'entrée pour l'agent mobile.
-    Accepte une photo optionnelle + métadonnées GPS.
+    Si une photo est fournie, OCR tente de lire la plaque automatiquement.
+    La plaque OCR est utilisée si elle est reconnue en DB, sinon la plaque saisie manuellement est conservée.
     """
     config = db.query(PosteConfig).filter(PosteConfig.poste == poste).first()
     if config and config.capture_mode == CaptureMode.CAMERA:
@@ -84,22 +85,45 @@ async def create_event_mobile(
 
     image_path = None
     confiance_ocr = None
+    plaque_finale = plaque
+
     if photo:
         import os
         from app.config import get_settings
+        from app.services.cv_service import CVService
         settings = get_settings()
         os.makedirs(settings.upload_dir, exist_ok=True)
-        
+
         contents = await photo.read()
         file_path = os.path.join(settings.upload_dir, photo.filename)
         with open(file_path, "wb") as f:
             f.write(contents)
-            
         image_path = f"/uploads/{photo.filename}"
+
+        # ── Tentative OCR sur la photo ───────────────────────────────────────
+        try:
+            cv = CVService()
+            ocr_result = cv.process_uploaded_image(contents, poste, db)
+            if ocr_result:
+                plaque_finale = ocr_result["plaque"]
+                confiance_ocr = ocr_result["confiance_ocr"]
+                # Si OCR a créé l'event directement, on retourne son résultat
+                return {
+                    "id": ocr_result["event_id"],
+                    "plaque": plaque_finale,
+                    "poste": poste.value,
+                    "type_event": ocr_result["type_event"],
+                    "confiance_ocr": confiance_ocr,
+                    "source": "hybrid",
+                    "image_path": image_path,
+                    "ocr_auto": True,
+                }
+        except Exception as e:
+            print(f"[Mobile] OCR optionnel échoué, plaque manuelle conservée: {e}")
 
     service = EventIngestionService(db)
     event = service.ingest_event(
-        plaque=plaque,
+        plaque=plaque_finale,
         poste=poste,
         type_event=type_event,  # type: ignore
         source="agent_mobile",

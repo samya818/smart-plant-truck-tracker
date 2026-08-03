@@ -88,6 +88,8 @@ class EventRead(EventBase):
     source: str
     agent_id: Optional[str] = None
     confiance_detection: Optional[float] = None
+    confiance_ocr: Optional[float] = None
+    necesita_confirmacion: bool = False
     cause: Optional[DelayCauseRead] = None
     minutes_retard: Optional[int] = None
     image_path: Optional[str] = None

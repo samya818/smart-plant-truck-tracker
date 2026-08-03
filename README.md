@@ -224,10 +224,10 @@ Le système intègre un **pipeline d'apprentissage automatique** qui s'améliore
 
 ```mermaid
 graph LR
-    subgraph N0["NIVEAU 0 : Règles Métier"]
+    subgraph N0["NIVEAU 0 : Règles Métier Dynamiques"]
         R0["< 50 événements
-Seuils configurables
-par le superviseur"]
+Seuils dynamiques configurés
+en direct par le superviseur dans l'UI"]
     end
 
     subgraph N1["NIVEAU 1 : EWMA"]
@@ -261,9 +261,9 @@ Séries temporelles
 ### Entraînement Automatique
 
 - Le modèle s'entraîne **automatiquement toutes les 6 heures**
-- **Prophet** (Facebook) capture la saisonnalité journalière
-- **XGBoost** (expérimental) teste si un modèle plus complexe améliore la précision
-- Si XGBoost bat Prophet de plus de 5%, il devient le nouveau modèle
+- **Prophet** (Facebook) capture la saisonnalité journalière (modèle principal en production)
+- **XGBoost** (expérimental) effectue une inférence dynamique basée sur les caractéristiques temporelles (`hour_sin`, `dow_sin`, etc.)
+- Si XGBoost est activé via toggle, ses prédictions réelles s'affichent dans le système
 - Les modèles sont persistés dans le dossier `models/` (volume Docker)
 
 ### Features Utilisées
@@ -308,6 +308,7 @@ erDiagram
         float gps_lat
         float gps_lon
         float confiance_ocr
+        bool necesita_confirmacion
         string image_path
     }
 
@@ -339,6 +340,19 @@ erDiagram
         string camera_url
         bool camera_active
         int seuil_attente_max
+    }
+
+    ETAPE_CONFIG {
+        int id PK
+        int ordre
+        string code UK
+        string nom
+        string description
+        int seuil_minutes
+        string poste_ref
+        bool is_active
+        bool is_default
+        bool is_custom
     }
 
     TRANSPORTEUR ||--o{ TRUCK : "possède"
@@ -422,7 +436,7 @@ smart-plant-truck-tracker/
 │       │   └── events.py        # Historique des événements
 │       └── services/
 │           ├── event_ingestion.py   # Logique métier : suivi des cycles
-│           ├── cv_service.py        # Simulation caméra / OCR réel
+│           ├── cv_service.py        # Pipeline OCR réel (YOLO + EasyOCR) + Simulation
 │           ├── auto_train.py        # Pipeline ML automatique
 │           └── prediction.py        # Service de prédiction
 │
@@ -452,16 +466,30 @@ smart-plant-truck-tracker/
 ## ⚙️ Variables d'Environnement
 
 ```env
-# Base de données
+# ── Base de données ──────────────────────────────────────────
 POSTGRES_USER=lafarge_user
 POSTGRES_PASSWORD=votre_mot_de_passe_fort
 POSTGRES_DB=lafarge_tracker
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
 
-# Mode application
-CV_MODE=simulation          # "simulation" ou "real"
-SIMULATION_TRUCKS_PER_DAY=80
+# ── Mode Computer Vision ─────────────────────────────────────
+# "simulation" : données générées automatiquement (aucune caméra requise)
+# "real"       : caméras RTSP actives, OCR activé
+CV_MODE=simulation
 
-# Seuils (minutes)
+# ── URLs des caméras RTSP (uniquement si CV_MODE=real) ───────
+# Format : rtsp://utilisateur:motdepasse@ip:port/stream
+# Laisser vide = ce poste sera géré par l'agent mobile uniquement
+CAMERA_PORTE_USINE=rtsp://192.168.1.10:554/stream
+CAMERA_PARKING=rtsp://192.168.1.11:554/stream
+CAMERA_BASCULE=rtsp://192.168.1.12:554/stream
+CAMERA_ENSACHAGE=rtsp://192.168.1.13:554/stream
+
+# ── Simulation ───────────────────────────────────────────────
+SIMULATION_TRUCKS_PER_DAY=80   # Camions générés par jour
+
+# ── Seuils d'alerte (minutes) ────────────────────────────────
 SEUIL_ATTENTE_PARKING_MAX=30
 SEUIL_BASCULE_MAX=15
 SEUIL_ENSACHAGE_MAX=45
@@ -470,19 +498,167 @@ SEUIL_CYCLE_TOTAL_MAX=120
 
 ---
 
-## 🎬 Comment Fonctionne la Simulation
+## 👁️ Système de Vision par Ordinateur (OCR)
 
-Quand `CV_MODE=simulation`, le backend génère automatiquement un trafic camion réaliste :
+Le cœur du système de capture automatique. Deux modes disponibles, configurables sans redémarrage.
 
-- **80 camions/jour** par défaut (configurable)
-- Les camions arrivent entre **06:00 et 18:00**
-- Chaque camion traverse les 6 étapes avec des durées réalistes
-- Des retards et anomalies aléatoires sont injectés (~15% des cycles)
-- Le dashboard se met à jour en direct au fur et à mesure
+### Mode Simulation vs Mode Réel
 
-> **Cela permet de tester le système complet sans aucune caméra physique.**
+| Aspect | `CV_MODE=simulation` | `CV_MODE=real` |
+|--------|----------------------|----------------|
+| **Démarrage** | Immédiat, aucun matériel | Charge YOLO + EasyOCR (~30s) |
+| **Source de données** | Générateur aléatoire réaliste | Flux RTSP des caméras physiques |
+| **Plaques** | 6 immatriculations codées en dur | Lues depuis l'image par OCR |
+| **Confiance OCR** | Nombre aléatoire 0.75–0.99 | Score réel fourni par EasyOCR |
+| **Idéal pour** | Développement, démonstration | Production en usine |
 
-Pour utiliser de vraies caméras, mettez `CV_MODE=real` dans `.env` et configurez les URLs RTSP dans le Dashboard → ⚙️ Configuration.
+---
+
+### 🔁 Mode Simulation
+
+Quand `CV_MODE=simulation`, le backend génère automatiquement un trafic camion réaliste **sans aucune caméra**.
+
+Chaque camion a sa propre coroutine `asyncio` indépendante et traverse le cycle complet dans l'ordre :
+
+```
+Porte Usine (entrée) → Parking (entrée) → Parking (sortie)
+  → Bascule (tare) → Ensachage (chargement) → Bascule (brut) → Porte Usine (sortie)
+```
+
+Les durées entre chaque étape sont réalistes et variables :
+
+| Étape | Durée simulée |
+|-------|---------------|
+| Porte → Parking | 5 – 10 s (simulation) / quelques minutes réel |
+| Parking | 10 – 30 s |
+| Bascule (tare) | 8 – 20 s |
+| Ensachage | 15 – 40 s |
+| Bascule (brut) | 5 – 15 s |
+| Sortie | 20 – 60 s avant le prochain cycle |
+
+> 💡 La simulation redémarre automatiquement là où elle s'était arrêtée (les cycles `EN_COURS` en DB sont restaurés au démarrage).
+
+---
+
+### 🎯 Mode Réel — Pipeline YOLO + EasyOCR
+
+Quand `CV_MODE=real`, le système active un pipeline de vision par ordinateur complet.
+
+#### Flux de traitement pour chaque frame de caméra
+
+```
+📷 Flux RTSP (ex: rtsp://192.168.1.10:554/stream)
+    │
+    ▼  cv2.VideoCapture() — capture du frame le plus récent
+    │
+    ▼  YOLOv8n — détection de véhicules
+    │   • Classes acceptées : voiture (2), bus (5), camion (7)
+    │   • Seuil de confiance : 0.40 minimum
+    │
+    ▼  Crop + Prétraitement
+    │   • Découpe la zone du véhicule détecté (+30px de marge)
+    │   • Conversion en niveaux de gris
+    │   • CLAHE (amélioration du contraste adaptatif)
+    │   • Upscale ×2 (les petites plaques sont mieux lues)
+    │
+    ▼  EasyOCR (ar + en) — lecture de la plaque
+    │   • Lit le texte dans la zone cropée
+    │   • Retourne le texte + un score de confiance (0.0 → 1.0)
+    │   • Seuil minimum : 0.45
+    │
+    ▼  Fuzzy Match — recherche en base de données
+    │   • Normalise le texte (supprime accents, majuscules, garde alphanum+tirets)
+    │   • Calcule la similarité LCS avec toutes les immatriculations en DB
+    │   • Accepte le match si similarité ≥ 0.70
+    │
+    ▼  Debounce — anti-doublon
+    │   • Ignore les détections du même camion au même poste si < 30 secondes
+    │
+    ▼  Inférence entrée/sortie
+    │   • Si le camion n'a pas de cycle EN_COURS → type = "entree"
+    │   • Si le camion est déjà dans un cycle → type = "sortie"
+    │
+    ▼  Sauvegarde du frame annoté
+    │   • Rectangle vert autour du véhicule détecté
+    │   • Plaque + confiance affichées sur l'image
+    │   • Fichier sauvegardé dans uploads/captures_camera/
+    │
+    ▼  EventIngestionService — création de l'événement
+        • Enregistrement en PostgreSQL
+        • Broadcast WebSocket → dashboard mis à jour en direct
+```
+
+#### Polling par caméra
+
+Chaque caméra configurée reçoit sa propre coroutine `asyncio` indépendante :
+
+- **Intervalle** : 1 capture toutes les **2 secondes** par caméra
+- **Thread séparé** : la capture n'bloque pas la boucle d'événements FastAPI
+- **Récupération d'erreur** : si une caméra est inaccessible, la boucle réessaie toutes les 5 secondes avec un log après 5 échecs consécutifs
+- **Chargement des modèles** : YOLO et EasyOCR sont chargés **une seule fois** au démarrage (lazy loading), pas à chaque frame
+
+#### Configuration des caméras
+
+Les URLs RTSP peuvent être configurées de **deux façons** (priorité à la DB) :
+
+1. **Via la base de données** (Dashboard → ⚙️ Configuration) — modifiable à chaud sans redémarrer
+2. **Via le fichier `.env`** — fallback si la DB ne contient pas d'URL
+
+---
+
+### 🔀 Mode Hybride (Caméra + Agent Mobile)
+
+Le mode `CV_MODE=real` n'empêche pas l'utilisation de l'agent mobile. Les deux sources coexistent grâce au mécanisme de **déduplication** :
+
+- Si une caméra et un agent rapportent le même camion au même poste dans les **30 secondes**, un seul événement est créé avec `source="hybrid"`
+- Si la caméra est hors ligne pour un poste, l'agent mobile prend automatiquement le relais
+
+---
+
+### 🧪 Tester l'OCR sans Caméra
+
+Un endpoint dédié permet de tester le pipeline OCR en envoyant une photo :
+
+```bash
+# Tester avec curl
+curl -X POST http://localhost:8000/admin/ocr-test \
+  -F "image=@photo_camion.jpg" \
+  -F "poste=porte_usine"
+```
+
+Réponse exemple :
+```json
+{
+  "nb_vehicules_detectes": 1,
+  "nb_textes_lus": 2,
+  "meilleur_resultat": {
+    "texte_brut": "12345-A-1",
+    "texte_normalise": "12345-A-1",
+    "confiance_ocr": 0.847,
+    "plaque_matchee": "12345-أ-1",
+    "confiance_yolo": 0.912,
+    "bbox": [142, 89, 634, 401]
+  },
+  "tous_les_resultats": [...]
+}
+```
+
+> ⚠️ Cet endpoint **ne crée pas d'événement en DB** — il sert uniquement à calibrer et valider la détection avant la mise en production.
+
+Disponible aussi depuis l'explorateur interactif : **http://localhost:8000/docs** → `POST /admin/ocr-test`
+
+---
+
+### 📦 Dépendances Vision (déjà dans requirements.txt)
+
+```txt
+ultralytics==8.2.0          # YOLOv8 — détection de véhicules
+easyocr==1.7.0              # OCR multilingue (arabe + anglais)
+opencv-python-headless==4.9.0.80  # Traitement d'image (sans interface graphique)
+pillow==10.3.0              # Manipulation d'images
+```
+
+> Le modèle `yolov8n.pt` (~6 MB) est téléchargé automatiquement au premier démarrage en mode `real`.
 
 ---
 

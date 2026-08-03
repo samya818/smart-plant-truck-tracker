@@ -29,6 +29,8 @@ export interface Event {
   agent_id?: string;
   cause?: DelayCause;
   minutes_retard?: number;
+  confiance_ocr?: number;
+  necesita_confirmacion?: boolean;
   image_path?: string;
   truck?: Truck;
 }

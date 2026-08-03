@@ -114,6 +114,7 @@ class Event(Base):
     # --- Métadonnées CV ---
     confiance_detection = Column(Float, nullable=True)
     confiance_ocr = Column(Float, nullable=True)
+    necesita_confirmacion = Column(Boolean, default=False)
     image_path = Column(String(255), nullable=True)
 
     # --- Géolocalisation (si agent mobile) ---

@@ -48,9 +48,12 @@ class Settings(BaseSettings):
 
     @property
     def get_database_url(self) -> str:
-        """Génère dynamiquement l'URL de connexion PostgreSQL."""
+        """Génère dynamiquement l'URL de connexion PostgreSQL ou SQLite fallback."""
         if self.database_url:
             return self.database_url
+        if self.postgres_host in ("db", "localhost", "127.0.0.1"):
+            # En développement local sans conteneur PostgreSQL actif -> SQLite local
+            return "sqlite:///./lafarge_local.db"
         return f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
     @property

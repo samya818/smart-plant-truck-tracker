@@ -211,6 +211,11 @@ export function TruckCard({ immatriculation, events }: Props) {
           <span className="font-mono font-bold text-base tracking-widest text-gray-800">{immatriculation}</span>
         </div>
         <div className="flex items-center gap-2">
+          {events.some(e => e.necesita_confirmacion) && (
+            <span className="flex items-center gap-1 text-xs text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full font-bold border border-amber-300 animate-pulse" title="Confiance OCR < 65% - confirmation requise">
+              ⚠️ OCR faible (<65%) — À confirmer
+            </span>
+          )}
           {hasAnomalie && (
             <span className="flex items-center gap-1 text-xs text-red-600 bg-red-100 px-2 py-0.5 rounded-full font-medium">
               <AlertTriangle className="w-3 h-3" /> Retard

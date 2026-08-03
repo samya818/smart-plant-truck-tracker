@@ -90,6 +90,9 @@ class EventIngestionService:
         if type_event == "sortie" and poste != PosteType.PORTE_USINE:
             self._infer_missing_entry(truck.id, poste, now, source)
 
+        # ── Seuil de confiance OCR fallback ( < 0.65 nécessite confirmation ) ──
+        necesita_confirmacion = bool(confiance_ocr is not None and confiance_ocr < 0.65)
+
         # ── Création de l'événement ──────────────────────────────────────────
         event = Event(
             truck_id=truck.id,
@@ -100,6 +103,7 @@ class EventIngestionService:
             agent_id=agent_id,
             image_path=image_path,
             confiance_ocr=confiance_ocr,
+            necesita_confirmacion=necesita_confirmacion,
             gps_lat=gps_lat,
             gps_lon=gps_lon,
             delay_cause_id=delay_cause_id,

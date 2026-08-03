@@ -74,9 +74,13 @@ async def lifespan(app: FastAPI):
 
 
 
+    cv_service = CVService()
     if settings.cv_mode == "simulation":
-        cv_service = CVService()
         asyncio.create_task(cv_service.run_simulation_loop())
+    elif settings.cv_mode == "real":
+        asyncio.create_task(cv_service.run_real_loop())
+    else:
+        print(f"[Startup] Mode CV inconnu : '{settings.cv_mode}' — aucune boucle démarrée")
 
     auto_train = AutoTrainPipeline()
     asyncio.create_task(auto_train.schedule_loop())
