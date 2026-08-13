@@ -325,22 +325,29 @@ def get_rapport(
 
         poste_actuel = last_event.poste.value if last_event and hasattr(last_event.poste, "value") else (last_event.poste if last_event else "porte_usine")
         dernier_passage = last_event.horodatage if last_event else c.entree_porte
-        if dernier_passage and dernier_passage.tzinfo:
+        if dernier_passage and dernier_passage.tzinfo is not None:
             dernier_passage = dernier_passage.replace(tzinfo=None)
 
         minutes_attente = round((now - dernier_passage).total_seconds() / 60, 1) if dernier_passage else 0.0
 
-        camions_bloques_actuellement.append({
-            "truck_id": c.truck_id,
-            # (a) Immatriculation du camion en usine (b) Formule: truck.immatriculation
-            "immatriculation": c.truck.immatriculation if c.truck else "Inconnu",
-            # (a) Dernier poste atteint par le camion (b) Formule: dernier Event.poste
-            "poste_actuel": poste_actuel,
-            # (a) Minutes écoulées depuis l'entrée dans le poste (b) Formule: (maintenant - horodatage_dernier_event)
-            "minutes_attente_poste": minutes_attente,
-            # (a) Heure d'entrée en usine (b) Formule: cycle.entree_porte
-            "entree_porte": c.entree_porte.isoformat() if c.entree_porte else None,
-        })
+        # Seuil par poste pour considérer le camion comme "bloqué" / "en retard"
+        seuil_poste_map = {
+            "parking": settings.seuil_attente_parking_max,
+            "bascule": settings.seuil_bascule_max,
+            "ensachage": settings.seuil_ensachage_max,
+            "porte_usine": settings.seuil_cycle_total_max,
+        }
+        seuil_tolere = seuil_poste_map.get(poste_actuel.lower(), 30)
+
+        # Un camion est considéré BLOQUÉ s'il a dépassé le seuil autorisé au poste actuel
+        if minutes_attente >= seuil_tolere:
+            camions_bloques_actuellement.append({
+                "truck_id": c.truck_id,
+                "immatriculation": c.truck.immatriculation if c.truck else "Inconnu",
+                "poste_actuel": poste_actuel,
+                "minutes_attente_poste": minutes_attente,
+                "entree_porte": c.entree_porte.isoformat() if c.entree_porte else None,
+            })
 
     # Tri par temps d'attente au poste le plus élevé d'abord
     camions_bloques_actuellement.sort(key=lambda x: x["minutes_attente_poste"], reverse=True)
