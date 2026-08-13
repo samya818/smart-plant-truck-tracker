@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rapport de Stage - Samya Loukili - Smart Truck Tracker</title>
+<style>
+@page { size: A4; margin: 2cm 2.2cm 2.5cm 2.2cm; }
+@page :first { margin: 0; }
+@page cover { margin: 0; }
+@page toc { margin: 2cm 2.2cm 2cm 2.2cm; }
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0;
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 10.8pt; line-height: 1.65;
+  color: #1e293b; background: #fff;
+}
+.page-break { page-break-before: always; }
+.avoid-break { page-break-inside: avoid; }
+
+/* ===== COVER ===== */
+.cover {
+  width: 210mm; min-height: 297mm; margin: 0 auto;
+  display: flex; flex-direction: column;
+  justify-content: space-between; align-items: center;
+  text-align: center;
+  background: linear-gradient(165deg, #0f172a 0%, #1e3a5f 40%, #0f4c81 70%, #1e40af 100%);
+  color: #fff; position: relative; overflow: hidden;
+  page-break-after: always;
+}
+.cover::before {
+  content: ""; position: absolute; top: -50%; right: -30%;
+  width: 80%; height: 120%;
+  background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+.cover::after {
+  content: ""; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 8px; background: linear-gradient(90deg, #f59e0b, #ef4444, #8b5cf6);
+}
+.cover-header {
+  width: 100%; padding: 35px 50px;
+  display: flex; justify-content: space-between; align-items: center;
+  position: relative; z-index: 2;
+}
+.cover-header img { height: 85px; width: auto; object-fit: contain; }
+.cover-main {
+  flex: 1; display: flex; flex-direction: column;
+  justify-content: center; align-items: center;
+  padding: 20px 70px; position: relative; z-index: 2;
+}
+.cover-badge {
+  display: inline-block; background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.25);
+  color: #fff; padding: 10px 28px; border-radius: 30px;
+  font-size: 9.5pt; font-weight: 600; letter-spacing: 2px;
+  text-transform: uppercase; margin-bottom: 35px;
+}
+.cover h1 {
+  font-size: 24pt; font-weight: 800; color: #fff;
+  margin: 0 0 18px 0; line-height: 1.25;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.3);
+}
+.cover-subtitle {
+  font-size: 13pt; color: #93c5fd; font-weight: 400;
+  margin-bottom: 50px; letter-spacing: 0.5px;
+}
+.cover-meta {
+  margin-top: 40px; font-size: 10.5pt; color: #cbd5e1;
+  line-height: 2.1;
+}
+.cover-meta strong { color: #fff; font-weight: 600; }
+.cover-footer {
+  width: 100%; padding: 25px;
+  font-size: 9.5pt; color: #94a3b8;
+  position: relative; z-index: 2;
+}
+.cover-img {
+  width: 100%; max-height: 160px; object-fit: cover;
+  margin: 15px 0 30px 0; border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+  opacity: 0.9;
+}
+
+/* ===== CONTENT ===== */
+.content { max-width: 210mm; margin: 0 auto; padding: 0 2cm; }
+h1.chapter-title {
+  font-size: 19pt; color: #0f172a;
+  border-bottom: 4px solid #0f4c81;
+  padding-bottom: 12px; margin-top: 0; margin-bottom: 25px;
+  page-break-before: always; font-weight: 700;
+}
+h2 {
+  font-size: 13.5pt; color: #1e3a5f; margin-top: 28px; margin-bottom: 14px;
+  border-left: 5px solid #0f4c81; padding-left: 14px; font-weight: 600;
+}
+h3 {
+  font-size: 11.5pt; color: #1e40af; margin-top: 20px; margin-bottom: 10px;
+  font-weight: 600;
+}
+h4 { font-size: 10.8pt; color: #334155; margin-top: 14px; margin-bottom: 8px; font-weight: 600; }
+p { text-align: justify; margin-bottom: 11px; text-indent: 0; hyphens: auto; }
+
+/* ===== TOC ===== */
+.toc { page-break-after: always; }
+.toc h1 { font-size: 18pt; color: #0f172a; text-align: center; margin-bottom: 35px; font-weight: 700; }
+.toc ul { list-style: none; padding: 0; margin: 0; }
+.toc li { padding: 7px 0; border-bottom: 1px dotted #cbd5e1; display: flex; justify-content: space-between; }
+.toc li.level-1 { font-weight: 700; color: #0f172a; font-size: 11pt; }
+.toc li.level-2 { padding-left: 22px; font-size: 10.3pt; color: #475569; }
+.toc li.level-3 { padding-left: 44px; font-size: 9.8pt; color: #64748b; }
+
+/* ===== TABLES ===== */
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 9.8pt; page-break-inside: avoid; }
+table th { background: linear-gradient(135deg, #0f4c81, #1e40af); color: #fff; padding: 10px 12px; text-align: left; font-weight: 600; }
+table td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; }
+table tr:nth-child(even) { background: #f8fafc; }
+table tr:hover { background: #f1f5f9; }
+
+/* ===== FIGURES & SVG ===== */
+.figure { margin: 22px 0; text-align: center; page-break-inside: avoid; }
+.figure img { max-width: 100%; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+.figure-caption { font-size: 9.8pt; color: #64748b; margin-top: 10px; font-style: italic; }
+.svg-container { margin: 20px auto; max-width: 100%; }
+.svg-container svg { max-width: 100%; height: auto; }
+
+/* ===== CODE ===== */
+.code-block {
+  background: #0f172a; color: #e2e8f0; padding: 16px; border-radius: 8px;
+  font-family: "Fira Code", "Consolas", "Monaco", monospace; font-size: 9pt;
+  overflow-x: auto; margin: 15px 0; page-break-inside: avoid;
+  border-left: 4px solid #3b82f6; line-height: 1.5;
+}
+.code-block .comment { color: #6b7280; }
+.code-block .keyword { color: #c084fc; }
+.code-block .string { color: #4ade80; }
+.code-block .func { color: #60a5fa; }
+
+/* ===== BOXES ===== */
+.info-box {
+  background: linear-gradient(135deg, #eff6ff, #dbeafe);
+  border: 1px solid #93c5fd; border-radius: 8px;
+  padding: 16px; margin: 16px 0; page-break-inside: avoid;
+}
+.warning-box {
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  border: 1px solid #fcd34d; border-radius: 8px;
+  padding: 16px; margin: 16px 0; page-break-inside: avoid;
+}
+.success-box {
+  background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+  border: 1px solid #86efac; border-radius: 8px;
+  padding: 16px; margin: 16px 0; page-break-inside: avoid;
+}
+.abstract-box {
+  background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+  border-left: 5px solid #0f4c81; padding: 22px;
+  margin: 22px 0; border-radius: 0 10px 10px 0;
+  page-break-inside: avoid;
+}
+.abstract-box h3 { margin-top: 0; color: #0f4c81; }
+
+/* ===== MATH / FORMULAS ===== */
+.formula {
+  background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 8px; padding: 14px 20px;
+  margin: 14px 0; text-align: center; font-style: italic;
+  font-family: "Georgia", serif; font-size: 11pt; color: #1e3a5f;
+  page-break-inside: avoid;
+}
+
+/* ===== KEYWORDS ===== */
+.keywords { font-size: 10pt; color: #475569; margin-top: 18px; padding-top: 12px; border-top: 1px solid #e2e8f0; }
+.keywords strong { color: #0f172a; }
+
+/* ===== QUOTE ===== */
+blockquote {
+  margin: 18px 0; padding: 16px 24px;
+  border-left: 4px solid #f59e0b;
+  background: #fffbeb; font-style: italic; color: #78350f;
+  border-radius: 0 8px 8px 0; page-break-inside: avoid;
+}
+
+/* ===== TWO COL ===== */
+.two-col { display: flex; gap: 24px; }
+.two-col > div { flex: 1; }
+
+/* ===== SIGNATURE ===== */
+.signature-area { margin-top: 70px; display: flex; justify-content: space-between; }
+.signature-box { width: 42%; text-align: center; }
+.signature-line {
+  border-top: 1px solid #334155; margin-top: 55px; padding-top: 10px;
+  font-size: 10pt; color: #475569;
+}
+
+/* ===== PRINT ===== */
+@media print {
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .cover { page-break-after: always; }
+  .toc { page-break-after: always; }
+  h1.chapter-title { page-break-before: always; }
+}
+</style>
+</head>
+<body>
+
+<!-- ==================== PAGE DE COUVERTURE ==================== -->
+<div class="cover">
+  <div class="cover-header">
+    <img src="images/logo ensam meknes.jpeg" alt="ENSAM Meknes">
+    <img src="images/logo lafarge holcim.webp" alt="Holcim">
+  </div>
+  <div class="cover-main">
+    <div class="cover-badge">Rapport de Stage de Fin d'Annee</div>
+    <h1>Conception et Developpement d'une Plateforme Intelligente de Tracabilite et d'Optimisation des Flux Camions en Environnement Industriel</h1>
+    <div class="cover-subtitle">Cas d'application : <strong>Smart-Truck-Tracker</strong> &mdash; Holcim Meknes</div>
+    <img src="https://leseco.ma/wp-content/uploads/2020/03/ciment-les-usines-lafargeholcim-maroc-betonnent.jpg" alt="Usine Holcim" class="cover-img" onerror="this.style.display='none'">
+    <div class="cover-meta">
+      <strong>Presente par :</strong> Samya LOUKILI<br>
+      <strong>Filiere :</strong> Intelligence Artificielle et Sciences de Donnees &mdash; Systemes Industriels<br>
+      <strong>Ecole :</strong> ENSAM Meknes &mdash; Universite Moulay Ismail<br>
+      <strong>Organisme d'accueil :</strong> Holcim Maroc &mdash; Usine de Meknes (Ouisslane)<br>
+      <strong>Encadrant professionnel :</strong> M. Saad FETOUH<br>
+      <strong>Encadrant academique :</strong> M. Noureddine ALLASSAK<br>
+      <strong>Periode de stage :</strong> Juillet &mdash; Aout 2026
+    </div>
+  </div>
+  <div class="cover-footer">
+    ECOLE NATIONALE SUPERIEURE D'ARTS ET METIERS &mdash; ENSAM MEKNES &nbsp;|&nbsp; Annee Universitaire 2025 &mdash; 2026
+  </div>
+</div>
+
+<!-- ==================== PAGE DE JURY ==================== -->
+<div class="content page-break" style="text-align:center; padding-top:80px;">
+  <h1 style="font-size:22pt; color:#0f172a; margin-bottom:50px;">Soutenance de Stage</h1>
+  <div style="max-width:500px; margin:0 auto; text-align:left; font-size:11pt; line-height:2.2;">
+    <p><strong>Sujet :</strong> Conception et Developpement d'une Plateforme Intelligente de Tracabilite et d'Optimisation des Flux Camions &mdash; Smart-Truck-Tracker</p>
+    <p><strong>Etudiante :</strong> Samya LOUKILI</p>
+    <p><strong>Filiere :</strong> Intelligence Artificielle et Sciences de Donnees &mdash; Systemes Industriels</p>
+    <p><strong>Organisme d'accueil :</strong> Holcim Maroc, Usine de Meknes</p>
+    <p style="margin-top:30px;"><strong>Membres du Jury :</strong></p>
+    <p style="padding-left:20px;">M. Noureddine ALLASSAK &mdash; Encadrant Academique (ENSAM Meknes)</p>
+    <p style="padding-left:20px;">M. Saad FETOUH &mdash; Encadrant Professionnel (Holcim Meknes)</p>
+    <p style="margin-top:40px; text-align:center; color:#64748b;">Soutenu publiquement le _______________ 2026</p>
+  </div>
+</div>
+
+<!-- ==================== DEDICACE ==================== -->
+<div class="content page-break" style="text-align:center; padding-top:120px;">
+  <h2 style="border:none; color:#0f4c81; font-size:16pt;">Dedicace</h2>
+  <p style="font-style:italic; font-size:12pt; color:#475569; max-width:400px; margin:40px auto; line-height:2;">
+    A mes parents, pour leur amour inconditionnel et leur soutien sans faille tout au long de mon parcours.<br><br>
+    A mes freres et soeurs, pour leur patience et leurs encouragements.<br><br>
+    A tous ceux qui croient en le pouvoir de l'innovation pour transformer l'industrie.
+  </p>
+</div>
+
+<!-- ==================== TABLE DES MATIERES ==================== -->
+<div class="content toc">
+  <h1>Table des Matieres</h1>
+  <ul>
+    <li class="level-1"><span>Liste des Abreviations</span></li>
+    <li class="level-1"><span>Remerciements</span></li>
+    <li class="level-1"><span>Resume</span></li>
+    <li class="level-1"><span>Introduction Generale</span></li>
+    <li class="level-1"><span>Chapitre 1 &mdash; Contexte Historique et Presentation de l'Organisme</span></li>
+    <li class="level-2"><span>1.1 Le groupe mondial Holcim</span></li>
+    <li class="level-2"><span>1.2 L'implantation industrielle au Maroc</span></li>
+    <li class="level-2"><span>1.3 Le procede de fabrication et logistique camions</span></li>
+    <li class="level-2"><span>1.4 La problematique : limites de la tracabilite classique</span></li>
+    <li class="level-2"><span>1.5 Le Service Informatique : cadre d'accueil</span></li>
+    <li class="level-1"><span>Chapitre 2 &mdash; Etat de l'Art, Theorie et Choix Technologiques</span></li>
+    <li class="level-2"><span>2.1 La logistique industrielle 4.0</span></li>
+    <li class="level-2"><span>2.2 Vision par ordinateur et OCR</span></li>
+    <li class="level-2"><span>2.3 Architectures temps reel et WebSocket</span></li>
+    <li class="level-2"><span>2.4 Machine Learning pour la prediction temporelle</span></li>
+    <li class="level-2"><span>2.5 Deploiement conteneurise et Edge Computing</span></li>
+    <li class="level-1"><span>Chapitre 3 &mdash; Methodologie, Modelisation et Architecture</span></li>
+    <li class="level-2"><span>3.1 Analyse des besoins et specifications</span></li>
+    <li class="level-2"><span>3.2 Diagramme de cas d'utilisation</span></li>
+    <li class="level-2"><span>3.3 Architecture logicielle modulaire</span></li>
+    <li class="level-2"><span>3.4 Diagramme de classes</span></li>
+    <li class="level-2"><span>3.5 Modelisation des donnees et cycle de vie camion</span></li>
+    <li class="level-2"><span>3.6 Diagramme de sequence</span></li>
+    <li class="level-2"><span>3.7 Diagramme de deploiement</span></li>
+    <li class="level-2"><span>3.8 Le pipeline ML Zero-to-Hero</span></li>
+    <li class="level-1"><span>Chapitre 4 &mdash; Implementation, Deploiement et Resultats</span></li>
+    <li class="level-2"><span>4.1 Systeme de capture bi-mode</span></li>
+    <li class="level-2"><span>4.2 Dashboard superviseur et interface mobile</span></li>
+    <li class="level-2"><span>4.3 Statistiques et analytiques</span></li>
+    <li class="level-2"><span>4.4 Tests de performance et benchmarking</span></li>
+    <li class="level-2"><span>4.5 Analyse critique des performances et limites</span></li>
+    <li class="level-1"><span>Chapitre 5 &mdash; Guide d'Installation et d'Utilisation</span></li>
+    <li class="level-1"><span>Conclusion Generale et Perspectives</span></li>
+    <li class="level-1"><span>Annexes</span></li>
+  </ul>
+</div>
+
+<!-- ==================== LISTE DES ABREVIATIONS ==================== -->
+<div class="content page-break">
+  <h1 class="chapter-title" style="page-break-before:auto;">Liste des Abreviations</h1>
+  <table class="abbr-table">
+    <tr><th>Abreviation</th><th>Signification complete</th></tr>
+    <tr><td>IA</td><td>Intelligence Artificielle</td></tr>
+    <tr><td>ML</td><td>Machine Learning</td></tr>
+    <tr><td>DL</td><td>Deep Learning</td></tr>
+    <tr><td>OCR</td><td>Optical Character Recognition</td></tr>
+    <tr><td>ALPR</td><td>Automatic License Plate Recognition</td></tr>
+    <tr><td>CNN</td><td>Convolutional Neural Network</td></tr>
+    <tr><td>YOLO</td><td>You Only Look Once</td></tr>
+    <tr><td>API</td><td>Application Programming Interface</td></tr>
+    <tr><td>REST</td><td>Representational State Transfer</td></tr>
+    <tr><td>WS</td><td>WebSocket</td></tr>
+    <tr><td>ORM</td><td>Object-Relational Mapping</td></tr>
+    <tr><td>PG / PostgreSQL</td><td>PostgreSQL (base de donnees relationnelle)</td></tr>
+    <tr><td>Redis</td><td>REmote DIctionary Server</td></tr>
+    <tr><td>EWMA</td><td>Exponentially Weighted Moving Average</td></tr>
+    <tr><td>MAPE</td><td>Mean Absolute Percentage Error</td></tr>
+    <tr><td>ETA</td><td>Estimated Time of Arrival</td></tr>
+    <tr><td>PWA</td><td>Progressive Web App</td></tr>
+    <tr><td>Docker</td><td>Plateforme de conteneurisation</td></tr>
+    <tr><td>RTSP</td><td>Real Time Streaming Protocol</td></tr>
+    <tr><td>JSON</td><td>JavaScript Object Notation</td></tr>
+    <tr><td>CSV</td><td>Comma-Separated Values</td></tr>
+    <tr><td>HSE</td><td>Health, Safety and Environment</td></tr>
+    <tr><td>KPI</td><td>Key Performance Indicator</td></tr>
+    <tr><td>GPU / CPU</td><td>Graphics / Central Processing Unit</td></tr>
+    <tr><td>PoC</td><td>Proof of Concept</td></tr>
+    <tr><td>CI/CD</td><td>Continuous Integration / Continuous Deployment</td></tr>
+    <tr><td>SQL</td><td>Structured Query Language</td></tr>
+    <tr><td>JWT</td><td>JSON Web Token</td></tr>
+    <tr><td>CORS</td><td>Cross-Origin Resource Sharing</td></tr>
+    <tr><td>Nginx</td><td>Serveur web / reverse proxy</td></tr>
+  </table>
+</div>
+
+<!-- ==================== REMERCIEMENTS ==================== -->
+<div class="content page-break">
+  <h1 class="chapter-title" style="page-break-before:auto;">Remerciements</h1>
+  <p>Je tiens a exprimer ma sincere gratitude a l'ensemble du personnel de l'usine Holcim de Meknes pour l'accueil chaleureux reserve tout au long de ce stage de fin d'annee. Cette experience m'a permis de decouvrir, de l'interieur, la realite operationnelle d'un site industriel de premier plan et de mesurer concretement l'importance de la digitalisation dans la chaine logistique d'une cimenterie moderne.</p>
+  <p>Mes remerciements s'adressent en particulier a mon encadrant academique principal, Monsieur <strong>Noureddine ALLASSAK</strong>, pour son suivi methodologique rigoureux, ses conseils avisés et son accompagnement tout au long de ce parcours. Je remercie egalement Monsieur <strong>Saad FETOUH</strong> pour son soutien operationnel et ses retours techniques durant les phases de test et de déploiement.</p>
+  <p>Je remercie egalement l'ensemble du corps professoral de la filiere Intelligence Artificielle et Sciences de Donnees pour les Systemes Industriels de l'ENSAM, pour la qualite de la formation theorique et pratique m'ayant permis d'aborder ce stage avec les outils conceptuels et techniques necessaires a sa reussite.</p>
+  <p>Enfin, je remercie les equipes du departement Logistique et du departement Securite de l'usine Holcim Meknes pour leur patience dans l'explication des processus metier et leur contribution essentielle a la definition des besoins operationnels du projet Smart-Truck-Tracker.</p>
+</div>
+
+<!-- ==================== RESUME ==================== -->
+<div class="content page-break">
+  <h1 class="chapter-title" style="page-break-before:auto;">Resume</h1>
+  <div class="abstract-box">
+    <h3>Contexte et Objectifs</h3>
+    <p>Ce rapport presente le travail realise dans le cadre d'un stage de fin d'annee du cycle d'ingenieur, effectue au sein de l'usine de production de ciment Holcim de Meknes. Ce stage a porte sur la conception, le developpement et la validation d'une plateforme intelligente de tracabilite et d'optimisation des flux camions, denommee <strong>Smart-Truck-Tracker</strong>, dont l'objectif est de fournir une visibilite temps reel sur le parcours de chaque camion dans l'usine, de detecter automatiquement les goulots d'etranglement, et de predire les temps de cycle par intelligence artificielle.</p>
+  </div>
+  <p>Le systeme repose sur une architecture logicielle moderne et modulaire, combinant un <strong>backend FastAPI</strong> haute performance, une <strong>base de donnees PostgreSQL</strong> relationnelle, et un mecanisme de WebSocket en memoire pour la diffusion temps reel. Le <strong>frontend React</strong> est responsive et deploye sous forme de Progressive Web App (PWA). Le coeur analytique integre un pipeline de <strong>Machine Learning evolutif</strong> (Prophet + XGBoost) s'adaptant automatiquement au volume de donnees accumule.</p>
+  <p>La capture des evenements s'effectue selon un paradigme <strong>bi-mode</strong> innovant : une camera OCR alimentee par YOLOv8 lit automatiquement les plaques d'immatriculation, tandis qu'un agent de terrain peut valider ou saisir manuellement les donnees via une interface mobile optimisee. Cette redondance garantit la fiabilite du systeme meme dans des conditions industrielles difficiles (poussiere, eclairage variable).</p>
+  <p>Les resultats obtenus demontrent la faisabilite technique et la valeur metier de l'approche, avec une visibilite temps reel sur les cycles camions, une detection instantanee des depassements de seuil, et des predictions de temps de sejour permettant une anticipation proactive des retards.</p>
+  <div class="keywords"><strong>Mots-cles :</strong> Logistique industrielle, Intelligence Artificielle, Vision par ordinateur, OCR, Prediction temporelle, FastAPI, React, WebSocket, Docker, Industrie 4.0, Tracabilite, Optimisation des flux.</div>
+</div>
+
+<!-- ==================== INTRODUCTION GENERALE ==================== -->
+<div class="content page-break">
+  <h1 class="chapter-title" style="page-break-before:auto;">Introduction Generale</h1>
+  <p>L'industrie manufacturiere traverse, depuis le debut des annees 2020, une mutation profonde communement designee sous le terme d'<strong>Industrie 4.0</strong>, caracterisee par la convergence des technologies numeriques &mdash; capteurs connectes, intelligence artificielle, analyse de donnees massives &mdash; avec les processus de production traditionnels. Parmi les secteurs les plus concernes figure l'industrie cimentiere, dont les procedes impliquent des temperatures extremes, des equipements mecaniques puissants et des flux logistiques permanents.</p>
+  <p>C'est dans ce contexte que s'inscrit ce rapport, redige a l'issue d'un stage de fin d'annee effectue au sein de la filiere &laquo; Intelligence Artificielle et Sciences de Donnees pour les Systemes Industriels &raquo; de l'ENSAM, realise a la cimenterie Holcim de Meknes.</p>
+  <p>La <strong>logistique des flux camions</strong> constitue un enjeu strategique majeur pour toute cimenterie. Chaque jour, des dizaines de camions entrent et sortent du site, traversant un cycle de six etapes critiques : porte d'entree, parking, bascule (tare), ensachage/chargement, bascule (brut), et porte de sortie. Sans systeme de suivi automatise, le superviseur logistique n'a aucune visibilite en temps reel sur l'etat du parc camions, les temps d'attente par zone, ni les transporteurs responsables des retards recurrents.</p>
+  <p>La problematique centrale ayant guide ma mission de stage peut etre formulee ainsi : <em>comment concevoir un systeme de tracabilite automatise, fonde sur l'intelligence artificielle et les architectures temps reel, capable de suivre chaque camion a chaque etape de son parcours, de detecter instantanement les goulots d'etranglement, et de predire les temps de cycle pour une optimisation proactive des ressources logistiques ?</em> Cette problematique a donne naissance au projet <strong>&laquo; Smart-Truck-Tracker &raquo;</strong>.</p>
+  <p>Ce rapport s'articule en cinq chapitres : le cadre organisationnel du stage, l'etat de l'art theorique des technologies mobilisees, la methodologie et l'architecture du systeme, l'implementation et les resultats, puis le guide d'installation et d'utilisation, avant un bilan et des perspectives de deploiement a l'echelle de l'usine.</p>
+</div>
+
+<!-- ==================== CHAPITRE 1 ==================== -->
+<div class="content">
+  <h1 class="chapter-title">Chapitre 1 &mdash; Contexte Historique et Presentation de l'Organisme</h1>
+
+  <h2>1.1 Le groupe mondial Holcim</h2>
+  <p>Le groupe Holcim trouve ses origines en 1912, en Suisse, a Holderbank, avec la fondation de la &laquo; Financiere Glaris &raquo;. L'entreprise adopte ensuite le nom de Holderbank, puis Holcim. En 2015, Holcim fusionne avec le groupe francais Lafarge &mdash; fonde en 1833 &mdash; pour donner naissance a LafargeHolcim, alors numero un mondial du ciment, present sur plus de 2800 sites dans une quarantaine de pays. En mai 2021, le groupe simplifie son identite en adoptant le nom unique &laquo; Holcim &raquo;. Par decision du 22 mai 2026, la filiale marocaine &laquo; LafargeHolcim Maroc &raquo; a officiellement adopte la denomination &laquo; Holcim Maroc &raquo;.</p>
+  <p>Aujourd'hui, le groupe Holcim, dont le siege se situe a Zoug (Suisse), figure parmi les tout premiers acteurs mondiaux des materiaux de construction, structurant son offre autour du ciment, du beton pret a l'emploi, des granulats et des solutions de construction durable, avec un objectif de neutralite carbone a l'horizon 2050. Le chiffre d'affaires consolidé du groupe avoisine les 25 milliards de dollars, employant plus de 70 000 collaborateurs a travers le monde.</p>
+  <div class="figure">
+    <img src="images/lafarge holcim maroc logo.webp" alt="Logo Holcim" style="max-height:110px;">
+    <div class="figure-caption">Figure 1.1 &mdash; Identite visuelle du groupe Holcim (2021)</div>
+  </div>
+
+  <h2>1.2 L'implantation industrielle au Maroc et l'usine de Meknes</h2>
+  <p>Des 1928, l'implantation de plusieurs cimenteries marque la modernisation du secteur cimentier marocain, dont celle de Meknes, mise en service par Lafarge a travers la societe des Ciments Artificiels de Meknes (CADEM). La fusion mondiale de 2015 trouve son pendant national en 2016 avec la naissance de LafargeHolcim Maroc, devenue Holcim Maroc en 2026. L'entite marocaine se positionne comme leader national des materiaux de construction, avec une capacite de production annuelle superieure a 8 millions de tonnes.</p>
+  <p>L'usine de Meknes, implantee a Ouisslane sur une superficie de plus de 200 hectares, compte parmi les sites les plus anciens et les plus performants du groupe au Maroc. Elle dispose d'une ligne de production moderne avec un four rotatif de 4500 tonnes/jour, d'un atelier de broyage clinker, et d'une unité d'ensachage automatisee. C'est au sein de cette usine, au contact des equipes de logistique et de digitalisation, que s'est deroule mon stage, sous la supervision du Service Informatique.</p>
+  <div class="figure">
+    <img src="https://c8.alamy.com/comp/2BN3JEA/lafarge-cement-works-near-meknes-morocco-2BN3JEA.jpg" alt="Usine Holcim Meknes">
+    <div class="figure-caption">Figure 1.2 &mdash; Vue panoramique de l'usine Holcim de Meknes (Ouisslane)</div>
+  </div>
+
+  <h2>1.3 Le procede de fabrication du ciment et logistique camions</h2>
+  <p>La fabrication du ciment Portland est un procede continu, energivore, et impliquant des etapes mecaniques et thermiques de grande intensite. La matiere premiere, le calcaire associe a de l'argile, est extraite en carriere, generalement a proximite immediate de l'usine. Les blocs extraits sont ensuite reduits par concassage, stockes en tas de pre-homogeneisation puis broyes finement pour obtenir une farine crue homogene. La farine crue est ensuite portee a une temperature avoisinant 1450&deg;C dans un four rotatif. Le clinker obtenu est enfin broye et conditionne avant expedition.</p>
+
+  <table>
+    <tr><th>Etape du procede</th><th>Risques / Contraintes logistiques</th><th>Dispositif de maitrise actuel</th></tr>
+    <tr><td>Extraction (carriere)</td><td>Coactivite engins/pietons, projections</td><td>Plans de circulation, EPI, formation</td></tr>
+    <tr><td>Concassage</td><td>Happement, ecrasement, bruit, vibrations</td><td>Consignation LOTO, protections auditives</td></tr>
+    <tr><td>Broyage cru</td><td>Organes en rotation, poussieres</td><td>Balisage, EPI respiratoires, capotages</td></tr>
+    <tr><td>Cuisson (four)</td><td>Brulures, temperatures extremes, gaz</td><td>Zones interdites balisees, controle d'acces</td></tr>
+    <tr><td>Broyage clinker / expedition</td><td>Organes tournants, manutention, <strong>flux camions</strong></td><td>EPI, procedures de chargement encadrees</td></tr>
+  </table>
+  <p>C'est precisement au niveau de la <strong>zone d'expedition</strong> et des <strong>postes de controle poids</strong> que le systeme Smart-Truck-Tracker a ete pense pour apporter une couche de digitalisation, en tracant automatiquement chaque camion et en fournissant au superviseur les indicateurs necessaires a une gestion proactive des flux.</p>
+
+  <h2>1.4 La problematique : les limites de la tracabilite classique</h2>
+  <p>Plusieurs limites structurelles demeurent inherentes a toute approche de suivi logistique reposant principalement sur des formulaires papier ou des saisies Excel differees :</p>
+  <ul>
+    <li><strong>Absence de visibilite temps reel :</strong> le superviseur ne connait l'etat du parc camions qu'a l'issue d'une tournee sur le site, creant un delai de reaction inacceptable en cas d'engorgement.</li>
+    <li><strong>Perte de donnees et erreurs de saisie :</strong> les bons de passage papier sont frequemment egares, mal renseignes, ou transmis avec retard au service logistique.</li>
+    <li><strong>Aucune tracabilite historique exploitable :</strong> il est impossible de determiner, retrospectivement, quel transporteur a cause un retard recurrent ou quelle zone a ete le goulot d'etranglement d'une journee donnee.</li>
+    <li><strong>Responsabilite floue :</strong> en l'absence d'horodatage precis et automatise, les litiges entre transporteurs et l'usine sur les temps d'attente ne peuvent etre tranches objectivement.</li>
+    <li><strong>Cout d'opportunite :</strong> chaque minute d'attente d'un camion represente une perte financiere directe (immobilisation du materiel roulant, penalites contractuelles) et indirecte (insatisfaction client, surcharge des files d'attente).</li>
+  </ul>
+  <p>C'est pour repondre a cette problematique qu'a ete initie le projet <strong>Smart-Truck-Tracker</strong>, dont les fondements theoriques, l'architecture logicielle et les resultats font l'objet des chapitres suivants.</p>
+
+  <h2>1.5 Le Service Informatique : cadre d'accueil du stage</h2>
+  <p>Mon stage s'est deroule au sein du <strong>Service Informatique</strong> de l'usine de Meknes, encadre principalement par Monsieur <strong>Noureddine ALLASSAK</strong> en tant qu'encadrant academique, avec le soutien professionnel de Monsieur <strong>Saad FETOUH</strong> pour les aspects techniques et la coordination interne. Ce service, transversal par nature, assure le bon fonctionnement de l'ensemble des systemes d'information du site &mdash; infrastructure reseau, postes de travail, applications metier de gestion de production &mdash; tout en jouant un role croissant d'incubateur pour les projets de digitalisation et d'innovation technologique.</p>
+  <p>C'est dans ce cadre precis que s'inscrit le projet Smart-Truck-Tracker, ne de la rencontre entre une problematique operationnelle de logistique clairement identifiee par le site et une opportunite d'experimentation technologique portee par le Service Informatique, avec l'appui methodologique principal de mon encadrant academique, Monsieur Noureddine ALLASSAK, et le soutien operationnel de mon encadrant professionnel, Monsieur Saad FETOUH.</p>
+</div>
+
+<!-- ==================== CHAPITRE 2 ==================== -->
+<div class="content">
+  <h1 class="chapter-title">Chapitre 2 &mdash; Etat de l'Art, Theorie et Choix Technologiques</h1>
+
+  <h2>2.1 La logistique industrielle 4.0</h2>
+  <p>L'Industrie 4.0 redefinit les paradigmes de la logistique industrielle en introduisant la <strong>cyber-physique</strong>, l'<strong>Internet des Objets (IoT)</strong> et l'<strong>analytique predictive</strong> au coeur des processus de supply chain. Dans une cimenterie, la logistique ne se limite pas au transport : elle englobe la planification des expeditions, la gestion des files d'attente, le controle des temps de chargement, et la facturation liee au poids des marchandises. L'absence de visibilite temps reel sur ces flux engendre des couts caches considerables : immobilisation de materiel roulant, penalites de retard, et surtout insatisfaction des clients finaux.</p>
+  <p>Les systemes de <strong>yard management</strong> modernes s'appuient sur trois piliers technologiques : l'identification automatique (RFID, QR codes, OCR sur plaques), la localisation temps reel (GPS, balises), et l'optimisation algorithmique (recherche operationnelle, machine learning). Le projet Smart-Truck-Tracker s'inscrit dans cette lignee, avec une specificite majeure : une architecture <strong>bi-mode</strong> qui combine la capture automatique par camera et la saisie terrain par agent, garantissant une couverture fonctionnelle totale meme en cas de defaillance d'un sous-systeme.</p>
+
+  <h2>2.2 Les systemes de vision par ordinateur et l'OCR</h2>
+  <p>La reconnaissance optique de caracteres (OCR) a connu une revolution avec l'avenement du Deep Learning. Les architectures de type <strong>CNN</strong> (Convolutional Neural Networks) permettent aujourd'hui d'atteindre des taux de reconnaissance superieurs a 99% sur des plaques d'immatriculation standardisees, meme dans des conditions d'eclairage variables ou d'angles de prise de vue obliques.</p>
+
+  <div class="info-box">
+    <strong>Principe de la convolution :</strong> pour une image d'entree representee par un tenseur X de dimensions (H, W, C) et un filtre K de dimensions (k, k, C), l'operation de convolution en une position (i, j) s'exprime par :
+    <div class="formula">Y(i, j) = &Sigma;<sub>m</sub> &Sigma;<sub>n</sub> &Sigma;<sub>c</sub> X(i+m, j+n, c) &middot; K(m, n, c) + b</div>
+    ou b designe un terme de biais appris. Cette operation confere au reseau une propriete essentielle d'invariance par translation, tout en reduisant considerablement le nombre de parametres a apprendre.
+  </div>
+
+  <p>Dans le cadre de ce projet, le modele <strong>YOLOv8</strong> (You Only Look Once, version 8) a ete retenu pour la detection de plaques. YOLO reformule la detection d'objets comme un probleme de regression resolu en une seule passe avant du reseau, permettant des vitesses de traitement compatibles avec le temps reel sur CPU standard. La fonction de perte de YOLO combine trois termes :</p>
+  <div class="formula">L<sub>total</sub> = &lambda;<sub>loc</sub> &middot; L<sub>loc</sub> + &lambda;<sub>obj</sub> &middot; L<sub>conf</sub> + &lambda;<sub>cls</sub> &middot; L<sub>cls</sub></div>
+  <p>Une fois la zone de la plaque detectee, un pipeline OCR secondaire extrait les caracteres alphanumeriques. L'ensemble constitue un systeme de <strong>ALPR</strong> (Automatic License Plate Recognition) robuste, adapte aux plaques marocaines du format <code>12345-A-12</code>.</p>
+
+  <table>
+    <tr><th>Approche OCR</th><th>Avantages</th><th>Inconvenients</th></tr>
+    <tr><td>Tesseract (classique)</td><td>Open source, rapide sur CPU</td><td>Faible robustesse aux angles et a la poussiere</td></tr>
+    <tr><td>EasyOCR</td><td>Multilingue natif, bonne precision</td><td>Plus lourd, dependance PyTorch</td></tr>
+    <tr><td>PaddleOCR</td><td>Tres performant sur plaques, angle robuste</td><td>Modeles lourds, latence plus elevee</td></tr>
+    <tr><td>YOLOv8 + OCR custom</td><td>Rapide, modulable, temps reel</td><td>Necessite un dataset d'entrainement specifique</td></tr>
+  </table>
+
+  <h2>2.3 Les architectures temps reel et WebSocket</h2>
+    <p>La supervision d'un parc camions en mouvement exige une latence de communication inferieure a la seconde entre le terrain et le tableau de bord. Les architectures classiques &laquo; requete-reponse &raquo; (HTTP polling) sont inadequates : elles generent une charge reseau inutile et introduisent un delai minimum egal a la periode de polling.</p>
+    <p>Le protocole <strong>WebSocket</strong> (RFC 6455) etablit une connexion TCP bidirectionnelle persistante entre le client (navigateur) et le serveur. Contrairement a HTTP, il permet au serveur de pousser des donnees vers le client des qu'un evenement survient. Dans Smart-Truck-Tracker, la diffusion temps reel est geree par le <code>ConnectionManager</code> en memoire dans <code>backend/app/main.py</code>, et <code>backend/app/services/event_ingestion.py</code> appelle directement <code>manager.broadcast(payload)</code> apres la creation d'un event.</p>
+
+    <div class="code-block">
+    async def broadcast(self, message: dict):
+      dead = []
+      for conn in self.active_connections:
+        try:
+          await conn.send_text(json.dumps(message))
+        except Exception:
+          dead.append(conn)
+      for conn in dead:
+        self.disconnect(conn)
+    </div>
+  <p>Le code actuel n'implante pas de canal Redis Pub/Sub pour cette diffusion : le broker de messages est interne a l'instance backend, ce qui implique que la scalabilite horizontale en cluster reste a valider.</p>
+
+  <h2>2.4 Le Machine Learning pour la prediction temporelle</h2>
+  <p>La prediction des temps de cycle camion est un probleme de <strong>serie temporelle</strong> : on cherche a estimer, a l'instant <em>t</em>, la duree totale d'un cycle connaissant les durees des etapes deja accomplies et les conditions contextuelles (heure de la journee, jour de la semaine, affluence historique).</p>
+  <p>Le systeme Smart-Truck-Tracker implemente une architecture <strong>&laquo; Zero-to-Hero &raquo; a trois niveaux</strong> :</p>
+  <ul>
+    <li><strong>Niveau 0 (Regles metier) :</strong> pour moins de 50 evenements historiques, le systeme utilise des seuils configurables par le superviseur (ex: 30 min max pour le parking).</li>
+    <li><strong>Niveau 1 (EWMA) :</strong> entre 50 et 499 evenements, une moyenne mobile ponderee exponentiellement sur les 7 derniers jours fournit une estimation adaptative.</li>
+    <li><strong>Niveau 2 (Prophet + XGBoost) :</strong> au-dela de 500 evenements, le systeme entraine automatiquement un modele <strong>Prophet</strong> (Facebook) pour capturer la saisonnalite journaliere et hebdomadaire, et un modele <strong>XGBoost</strong> pour tester si une approche par gradient boosting surpasse la decomposition temporelle.</li>
+  </ul>
+
+  <div class="info-box">
+    <strong>Formulation mathematique de l'EWMA :</strong>
+    <div class="formula">S<sub>t</sub> = &alpha; &middot; x<sub>t</sub> + (1 - &alpha;) &middot; S<sub>t-1</sub></div>
+    ou &alpha; &isin; ]0, 1[ est le facteur de lissage (retenu a 0.3 dans notre implementation), x<sub>t</sub> la valeur observee a l'instant t, et S<sub>t</sub> la valeur lissee.
+  </div>
+
+  <p>Les features utilisees incluent les encodages cycliques <code>hour_sin/cos</code>, <code>dow_sin/cos</code>, les indicateurs binaires <code>is_weekend</code>, <code>is_morning_rush</code>, ainsi que les lags et moyennes glissantes sur 24h. L'entrainement s'execute automatiquement toutes les 6 heures, et le meilleur modele (au sens de la MAPE) est conserve.</p>
+
+  <h2>2.5 Edge Computing versus Cloud Computing</h2>
+  <p>Le projet adopte une architecture hybride : l'inference OCR (traitement des flux camera) peut etre realisee en <strong>Edge</strong> (serveur local sur le site industriel) pour garantir la confidentialite des donnees visuelles et la resilience en cas de coupure Internet, tandis que l'entrainement ML et le stockage historique long terme peuvent etre delegues au <strong>Cloud</strong> si necessaire. Le deploiement via <strong>Docker Compose</strong> rend cette frontiere floue : la meme stack peut tourner indifferemment sur un serveur edge ou une instance cloud, assurant la portabilite du systeme.</p>
+
+  <div class="success-box">
+    <strong>Avantage cle du conteneurisation :</strong> l'ensemble de la stack (FastAPI, React, PostgreSQL, Redis, Nginx) est decrite dans un seul fichier <code>docker-compose.yml</code>, permettant un deploiement reproductible en une seule commande sur n'importe quelle machine disposant de Docker, qu'il s'agisse d'un serveur edge industriel ou d'une instance cloud AWS/Azure.
+  </div>
+</div>
+
+<!-- ==================== CHAPITRE 3 ==================== -->
+<div class="content">
+  <h1 class="chapter-title">Chapitre 3 &mdash; Methodologie, Modelisation et Architecture du Smart-Truck-Tracker</h1>
+
+  <h2>3.1 Analyse des besoins et specifications fonctionnelles</h2>
+  <p>La phase initiale du stage a consiste en une immersion operationnelle de deux semaines au sein du departement Logistique. Des entretiens semi-directifs ont ete menes avec le superviseur d'expedition, les agents de bascule, et les gardes de porte. Cette analyse a permis d'identifier cinq besoins fondamentaux :</p>
+  <ol>
+    <li><strong>Tracabilite temps reel :</strong> connaitre, a tout instant, la position et le statut de chaque camion dans l'usine.</li>
+    <li><strong>Horodatage automatique :</strong> eliminer les saisies manuelles sujettes a erreur aux postes critiques.</li>
+    <li><strong>Detection des anomalies :</strong> alerter immediatement lorsqu'un camion depasse le seuil d'attente autorise pour une zone donnee.</li>
+    <li><strong>Analytique retrospective :</strong> generer des rapports de performance par transporteur, par zone, et par periode.</li>
+    <li><strong>Prediction des retards :</strong> anticiper les goulots d'etranglement avant qu'ils n'impactent la cadence de production.</li>
+  </ol>
+
+  <h2>3.2 Diagramme de cas d'utilisation</h2>
+  <p>Le diagramme de cas d'utilisation suivant synthetise les interactions entre les acteurs du systeme et les fonctionnalites offertes par la plateforme Smart-Truck-Tracker. Trois acteurs principaux ont ete identifies : le <strong>Superviseur Logistique</strong>, l'<strong>Agent de Terrain</strong>, et le <strong>Systeme OCR</strong> (agent logiciel autonome).</p>
+
+  <div class="svg-container">
+    <svg viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+        </marker>
+      </defs>
+      <!-- Background -->
+      <rect x="180" y="20" width="440" height="480" rx="12" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6,4"/>
+      <text x="400" y="48" text-anchor="middle" font-size="13" font-weight="700" fill="#334155">SYSTEME SMART-TRUCK-TRACKER</text>
+
+      <!-- Actors -->
+      <!-- Superviseur -->
+      <circle cx="80" cy="100" r="14" fill="#0f4c81"/>
+      <line x1="80" y1="114" x2="80" y2="155" stroke="#0f4c81" stroke-width="3"/>
+      <line x1="55" y1="130" x2="105" y2="130" stroke="#0f4c81" stroke-width="3"/>
+      <line x1="80" y1="155" x2="55" y2="195" stroke="#0f4c81" stroke-width="3"/>
+      <line x1="80" y1="155" x2="105" y2="195" stroke="#0f4c81" stroke-width="3"/>
+      <text x="80" y="215" text-anchor="middle" font-size="11" font-weight="600" fill="#0f172a">Superviseur</text>
+      <text x="80" y="230" text-anchor="middle" font-size="10" fill="#64748b">Logistique</text>
+
+      <!-- Agent Terrain -->
+      <circle cx="80" cy="300" r="14" fill="#059669"/>
+      <line x1="80" y1="314" x2="80" y2="355" stroke="#059669" stroke-width="3"/>
+      <line x1="55" y1="330" x2="105" y2="330" stroke="#059669" stroke-width="3"/>
+      <line x1="80" y1="355" x2="55" y2="395" stroke="#059669" stroke-width="3"/>
+      <line x1="80" y1="355" x2="105" y2="395" stroke="#059669" stroke-width="3"/>
+      <text x="80" y="415" text-anchor="middle" font-size="11" font-weight="600" fill="#0f172a">Agent de</text>
+      <text x="80" y="430" text-anchor="middle" font-size="10" fill="#64748b">Terrain</text>
+
+      <!-- Systeme OCR -->
+      <rect x="45" y="460" width="70" height="30" rx="15" fill="#7c3aed" opacity="0.15"/>
+      <rect x="45" y="460" width="70" height="30" rx="15" fill="none" stroke="#7c3aed" stroke-width="2"/>
+      <text x="80" y="480" text-anchor="middle" font-size="10" font-weight="600" fill="#7c3aed">Systeme OCR</text>
+
+      <!-- Use Cases -->
+      <!-- Row 1 -->
+      <ellipse cx="320" cy="100" rx="90" ry="28" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <text x="320" y="95" text-anchor="middle" font-size="10" font-weight="600" fill="#1e3a5f">Visualiser dashboard</text>
+      <text x="320" y="108" text-anchor="middle" font-size="9" fill="#475569">temps reel</text>
+
+      <ellipse cx="530" cy="100" rx="90" ry="28" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <text x="530" y="95" text-anchor="middle" font-size="10" font-weight="600" fill="#1e3a5f">Configurer seuils</text>
+      <text x="530" y="108" text-anchor="middle" font-size="9" fill="#475569">et alertes</text>
+
+      <!-- Row 2 -->
+      <ellipse cx="320" cy="190" rx="90" ry="28" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <text x="320" y="185" text-anchor="middle" font-size="10" font-weight="600" fill="#1e3a5f">Consulter statistiques</text>
+      <text x="320" y="198" text-anchor="middle" font-size="9" fill="#475569">et rapports</text>
+
+      <ellipse cx="530" cy="190" rx="90" ry="28" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <text x="530" y="185" text-anchor="middle" font-size="10" font-weight="600" fill="#1e3a5f">Predire temps de</text>
+      <text x="530" y="198" text-anchor="middle" font-size="9" fill="#475569">cycle (ML)</text>
+
+      <!-- Row 3 -->
+      <ellipse cx="320" cy="290" rx="90" ry="28" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+      <text x="320" y="285" text-anchor="middle" font-size="10" font-weight="600" fill="#14532d">Saisir evenement</text>
+      <text x="320" y="298" text-anchor="middle" font-size="9" fill="#166534">mobile (PWA)</text>
+
+      <ellipse cx="530" cy="290" rx="90" ry="28" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+      <text x="530" y="285" text-anchor="middle" font-size="10" font-weight="600" fill="#14532d">Signaler retard</text>
+      <text x="530" y="298" text-anchor="middle" font-size="9" fill="#166534">avec cause</text>
+
+      <!-- Row 4 -->
+      <ellipse cx="320" cy="380" rx="90" ry="28" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+      <text x="320" y="375" text-anchor="middle" font-size="10" font-weight="600" fill="#581c87">Detecter plaque</text>
+      <text x="320" y="388" text-anchor="middle" font-size="9" fill="#7e22ce">(YOLOv8 + OCR)</text>
+
+      <ellipse cx="530" cy="380" rx="90" ry="28" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+      <text x="530" y="375" text-anchor="middle" font-size="10" font-weight="600" fill="#581c87">Generer alerte</text>
+      <text x="530" y="388" text-anchor="middle" font-size="9" fill="#7e22ce">depassement seuil</text>
+
+      <!-- Row 5 -->
+      <ellipse cx="425" cy="465" rx="90" ry="28" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <text x="425" y="460" text-anchor="middle" font-size="10" font-weight="600" fill="#78350f">Gerer cycles et</text>
+      <text x="425" y="473" text-anchor="middle" font-size="9" fill="#92400e">historique camions</text>
+
+      <!-- Lines -->
+      <line x1="105" y1="130" x2="230" y2="100" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="105" y1="130" x2="440" y2="100" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="105" y1="160" x2="230" y2="190" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="105" y1="160" x2="440" y2="190" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <line x1="105" y1="340" x2="230" y2="290" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="105" y1="340" x2="440" y2="290" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <line x1="115" y1="475" x2="230" y2="380" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+      <line x1="115" y1="475" x2="440" y2="380" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+      <!-- Include relations -->
+      <line x1="410" y1="100" x2="440" y2="100" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="425" y="95" text-anchor="middle" font-size="8" fill="#94a3b8">&lt;&lt;include&gt;&gt;</text>
+
+      <line x1="410" y1="190" x2="440" y2="190" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="425" y="185" text-anchor="middle" font-size="8" fill="#94a3b8">&lt;&lt;include&gt;&gt;</text>
+
+      <line x1="320" y1="318" x2="320" y2="352" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="340" y="338" text-anchor="middle" font-size="8" fill="#94a3b8">&lt;&lt;extend&gt;&gt;</text>
+
+      <line x1="320" y1="408" x2="380" y2="445" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="340" y="432" text-anchor="middle" font-size="8" fill="#94a3b8">&lt;&lt;include&gt;&gt;</text>
+    </svg>
+  </div>
+  <div class="figure-caption">Figure 3.1 &mdash; Diagramme de cas d'utilisation du systeme Smart-Truck-Tracker</div>
+
+  <h2>3.3 Architecture logicielle modulaire</h2>
+  <p>Le systeme Smart-Truck-Tracker repose sur une architecture en <strong>quatre couches</strong>, conforme aux principes de separation des responsabilites (SoC) et de scalabilite horizontale. Chaque couche communique avec ses voisines uniquement via des interfaces bien definies, garantissant le remplacement ou la mise a l'echelle independante de chaque composant.</p>
+
+  <div class="svg-container">
+    <svg viewBox="0 0 700 420" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+      <!-- Layer 1: Client -->
+      <rect x="50" y="20" width="600" height="85" rx="10" fill="#eff6ff" stroke="#3b82f6" stroke-width="2"/>
+      <text x="350" y="42" text-anchor="middle" font-size="12" font-weight="700" fill="#1e40af">COUCHE CLIENT</text>
+      <rect x="80" y="55" width="160" height="35" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="160" y="77" text-anchor="middle" font-size="10" font-weight="600" fill="#1e3a5f">Dashboard Superviseur</text>
+      <rect x="270" y="55" width="160" height="35" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="350" y="77" text-anchor="middle" font-size="10" font-weight="600" fill="#1e3a5f">Interface Mobile PWA</text>
+      <rect x="460" y="55" width="160" height="35" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+      <text x="540" y="77" text-anchor="middle" font-size="10" font-weight="600" fill="#1e3a5f">Page Statistiques</text>
+
+      <!-- Arrow down -->
+      <line x1="350" y1="105" x2="350" y2="125" stroke="#64748b" stroke-width="2" marker-end="url(#arrow2)"/>
+
+      <!-- Layer 2: Gateway -->
+      <rect x="50" y="125" width="600" height="85" rx="10" fill="#f0fdf4" stroke="#22c55e" stroke-width="2"/>
+      <text x="350" y="147" text-anchor="middle" font-size="12" font-weight="700" fill="#166534">PASSERELLE TEMPS REEL</text>
+      <rect x="120" y="160" width="180" height="35" rx="6" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="210" y="182" text-anchor="middle" font-size="10" font-weight="600" fill="#14532d">Serveur WebSocket</text>
+      <rect x="400" y="160" width="180" height="35" rx="6" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+      <text x="490" y="182" text-anchor="middle" font-size="10" font-weight="600" fill="#14532d">API REST FastAPI</text>
+
+      <!-- Arrow down -->
+      <line x1="350" y1="210" x2="350" y2="230" stroke="#64748b" stroke-width="2" marker-end="url(#arrow2)"/>
+
+      <!-- Layer 3: Core -->
+      <rect x="50" y="230" width="600" height="100" rx="10" fill="#fff7ed" stroke="#f97316" stroke-width="2"/>
+      <text x="350" y="252" text-anchor="middle" font-size="12" font-weight="700" fill="#9a3412">SERVICES CORE</text>
+      <rect x="70" y="268" width="130" height="45" rx="6" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+      <text x="135" y="288" text-anchor="middle" font-size="9" font-weight="600" fill="#7c2d12">Ingestion</text>
+      <text x="135" y="301" text-anchor="middle" font-size="8" fill="#9a3412">Evenements</text>
+      <rect x="220" y="268" width="130" height="45" rx="6" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+      <text x="285" y="288" text-anchor="middle" font-size="9" font-weight="600" fill="#7c2d12">Moteur</text>
+      <text x="285" y="301" text-anchor="middle" font-size="8" fill="#9a3412">Analytique</text>
+      <rect x="370" y="268" width="130" height="45" rx="6" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+      <text x="435" y="288" text-anchor="middle" font-size="9" font-weight="600" fill="#7c2d12">Pipeline ML</text>
+      <text x="435" y="301" text-anchor="middle" font-size="8" fill="#9a3412">Prophet+XGB</text>
+      <rect x="520" y="268" width="110" height="45" rx="6" fill="#ffedd5" stroke="#f97316" stroke-width="1.5"/>
+      <text x="575" y="288" text-anchor="middle" font-size="9" font-weight="600" fill="#7c2d12">Service</text>
+      <text x="575" y="301" text-anchor="middle" font-size="8" fill="#9a3412">Vision OCR</text>
+
+      <!-- Arrow down -->
+      <line x1="350" y1="330" x2="350" y2="350" stroke="#64748b" stroke-width="2" marker-end="url(#arrow2)"/>
+
+      <!-- Layer 4: Data -->
+      <rect x="50" y="350" width="600" height="55" rx="10" fill="#fdf4ff" stroke="#a855f7" stroke-width="2"/>
+      <text x="120" y="372" text-anchor="middle" font-size="11" font-weight="700" fill="#7e22ce">COUCHE DONNEES</text>
+      <rect x="200" y="363" width="110" height="30" rx="5" fill="#f3e8ff" stroke="#a855f7" stroke-width="1.5"/>
+      <text x="255" y="382" text-anchor="middle" font-size="9" font-weight="600" fill="#581c87">PostgreSQL</text>
+      <rect x="330" y="363" width="80" height="30" rx="5" fill="#f3e8ff" stroke="#a855f7" stroke-width="1.5"/>
+      <text x="370" y="382" text-anchor="middle" font-size="9" font-weight="600" fill="#581c87">Redis</text>
+      <rect x="430" y="363" width="100" height="30" rx="5" fill="#f3e8ff" stroke="#a855f7" stroke-width="1.5"/>
+      <text x="480" y="382" text-anchor="middle" font-size="9" font-weight="600" fill="#581c87">Modeles ML</text>
+      <rect x="550" y="363" width="80" height="30" rx="5" fill="#f3e8ff" stroke="#a855f7" stroke-width="1.5"/>
+      <text x="590" y="382" text-anchor="middle" font-size="9" font-weight="600" fill="#581c87">Uploads</text>
+
+      <defs>
+        <marker id="arrow2" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L0,6 L9,3 z" fill="#64748b"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+  <div class="figure-caption">Figure 3.2 &mdash; Architecture en couches du systeme Smart-Truck-Tracker</div>
+
+  <p>La communication entre les scripts camera et le tableau de bord de supervision repose exclusivement sur des <strong>fichiers d'echange structures</strong> (JSON pour l'etat temps reel, CSV pour l'historique), volontairement simples mais concus pour etre aisement substituables par une base de donnees plus robuste sans modification des modules de perception.</p>
+
+  <h2>3.4 Diagramme de classes</h2>
+  <p>Le modele de donnees relationnel objet du systeme est articule autour de cinq entites principales, conformement au pattern <strong>Domain-Driven Design (DDD)</strong>. La classe <code>Cycle</code> constitue l'aggregate root du domaine logistique.</p>
+
+  <div class="svg-container">
+    <svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+      <!-- TRANSPORTEUR -->
+      <rect x="30" y="30" width="180" height="110" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <rect x="30" y="30" width="180" height="28" rx="4" fill="#3b82f6"/>
+      <text x="120" y="49" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">TRANSPORTEUR</text>
+      <text x="40" y="72" font-size="9" fill="#1e3a5f">+ id: int PK</text>
+      <text x="40" y="87" font-size="9" fill="#1e3a5f">+ nom: string</text>
+      <text x="40" y="102" font-size="9" fill="#1e3a5f">+ contact: string</text>
+      <text x="40" y="117" font-size="9" fill="#1e3a5f">+ est_actif: bool</text>
+      <text x="40" y="132" font-size="9" fill="#1e3a5f">+ est_whitelist: bool</text>
+
+      <!-- TRUCK -->
+      <rect x="30" y="200" width="180" height="95" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+      <rect x="30" y="200" width="180" height="28" rx="4" fill="#22c55e"/>
+      <text x="120" y="219" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">TRUCK</text>
+      <text x="40" y="242" font-size="9" fill="#14532d">+ id: int PK</text>
+      <text x="40" y="257" font-size="9" fill="#14532d">+ immatriculation: string UK</text>
+      <text x="40" y="272" font-size="9" fill="#14532d">+ transporteur_id: int FK</text>
+      <text x="40" y="287" font-size="9" fill="#14532d">+ type_camion: string</text>
+
+      <!-- EVENT -->
+      <rect x="340" y="30" width="200" height="140" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <rect x="340" y="30" width="200" height="28" rx="4" fill="#f59e0b"/>
+      <text x="440" y="49" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">EVENT</text>
+      <text x="350" y="72" font-size="9" fill="#78350f">+ id: int PK</text>
+      <text x="350" y="87" font-size="9" fill="#78350f">+ truck_id: int FK</text>
+      <text x="350" y="102" font-size="9" fill="#78350f">+ poste: enum</text>
+      <text x="350" y="117" font-size="9" fill="#78350f">+ type_event: enum {entree,sortie}</text>
+      <text x="350" y="132" font-size="9" fill="#78350f">+ horodatage: datetime</text>
+      <text x="350" y="147" font-size="9" fill="#78350f">+ source: enum {OCR,Agent,Hybride}</text>
+      <text x="350" y="162" font-size="9" fill="#78350f">+ gps_lat, gps_lon: float</text>
+
+      <!-- CYCLE -->
+      <rect x="340" y="240" width="200" height="155" rx="4" fill="#fce7f3" stroke="#ec4899" stroke-width="2"/>
+      <rect x="340" y="240" width="200" height="28" rx="4" fill="#ec4899"/>
+      <text x="440" y="259" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">CYCLE</text>
+      <text x="350" y="282" font-size="9" fill="#831843">+ id: int PK</text>
+      <text x="350" y="297" font-size="9" fill="#831843">+ truck_id: int FK</text>
+      <text x="350" y="312" font-size="9" fill="#831843">+ entree_porte: datetime</text>
+      <text x="350" y="327" font-size="9" fill="#831843">+ sortie_porte: datetime</text>
+      <text x="350" y="342" font-size="9" fill="#831843">+ duree_parking: float</text>
+      <text x="350" y="357" font-size="9" fill="#831843">+ duree_ensachage: float</text>
+      <text x="350" y="372" font-size="9" fill="#831843">+ duree_total: float</text>
+      <text x="350" y="387" font-size="9" fill="#831843">+ status: enum {EN_COURS,TERMINE}</text>
+
+      <!-- DELAY_CAUSE -->
+      <rect x="640" y="30" width="180" height="95" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+      <rect x="640" y="30" width="180" height="28" rx="4" fill="#a855f7"/>
+      <text x="730" y="49" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">DELAY_CAUSE</text>
+      <text x="650" y="72" font-size="9" fill="#581c87">+ id: int PK</text>
+      <text x="650" y="87" font-size="9" fill="#581c87">+ nom: string</text>
+      <text x="650" y="102" font-size="9" fill="#581c87">+ poste_concerne: enum</text>
+      <text x="650" y="117" font-size="9" fill="#581c87">+ usage_count: int</text>
+
+      <!-- POSTE_CONFIG -->
+      <rect x="640" y="200" width="180" height="95" rx="4" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="2"/>
+      <rect x="640" y="200" width="180" height="28" rx="4" fill="#0ea5e9"/>
+      <text x="730" y="219" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">POSTE_CONFIG</text>
+      <text x="650" y="242" font-size="9" fill="#0c4a6e">+ poste: enum PK</text>
+      <text x="650" y="257" font-size="9" fill="#0c4a6e">+ capture_mode: enum</text>
+      <text x="650" y="272" font-size="9" fill="#0c4a6e">+ camera_url: string</text>
+      <text x="650" y="287" font-size="9" fill="#0c4a6e">+ seuil_attente_max: int</text>
+
+      <!-- Relations -->
+      <line x1="120" y1="140" x2="120" y2="200" stroke="#64748b" stroke-width="1.5"/>
+      <text x="125" y="172" font-size="9" fill="#64748b">1</text>
+      <text x="105" y="172" font-size="9" fill="#64748b">*</text>
+
+      <line x1="210" y1="248" x2="340" y2="100" stroke="#64748b" stroke-width="1.5"/>
+      <text x="270" y="165" font-size="9" fill="#64748b">1</text>
+      <text x="285" y="180" font-size="9" fill="#64748b">*</text>
+
+      <line x1="210" y1="290" x2="340" y2="320" stroke="#64748b" stroke-width="1.5"/>
+      <text x="265" y="300" font-size="9" fill="#64748b">1</text>
+      <text x="280" y="315" font-size="9" fill="#64748b">*</text>
+
+      <line x1="540" y1="100" x2="640" y2="70" stroke="#64748b" stroke-width="1.5"/>
+      <text x="585" y="78" font-size="9" fill="#64748b">*</text>
+      <text x="600" y="93" font-size="9" fill="#64748b">0..1</text>
+
+      <line x1="440" y1="170" x2="440" y2="240" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="445" y="210" font-size="9" fill="#64748b">genere</text>
+    </svg>
+  </div>
+  <div class="figure-caption">Figure 3.3 &mdash; Diagramme de classes du domaine metier Smart-Truck-Tracker</div>
+
+  <h2>3.5 Modelisation des donnees et cycle de vie camion</h2>
+  <p>Le cycle de vie d'un camion dans l'usine est modelise comme une <strong>machine a etats</strong> finie. Chaque transition est declenchee par un evenement (entree ou sortie) capture a l'un des six postes du processus. Le diagramme de sequence suivant illustre le flux complet d'un cycle, depuis l'arrivee a la porte jusqu'a la sortie de l'usine.</p>
+
+  <div class="svg-container">
+    <svg viewBox="0 0 900 420" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+      <!-- Lifelines -->
+      <text x="80" y="25" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">Camion</text>
+      <line x1="80" y1="30" x2="80" y2="400" stroke="#cbd5e1" stroke-width="1.5"/>
+
+      <text x="250" y="25" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">Camera/Agent</text>
+      <line x1="250" y1="30" x2="250" y2="400" stroke="#cbd5e1" stroke-width="1.5"/>
+
+      <text x="420" y="25" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">FastAPI</text>
+      <line x1="420" y1="30" x2="420" y2="400" stroke="#cbd5e1" stroke-width="1.5"/>
+
+      <text x="590" y="25" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">PostgreSQL</text>
+      <line x1="590" y1="30" x2="590" y2="400" stroke="#cbd5e1" stroke-width="1.5"/>
+
+      <text x="760" y="25" text-anchor="middle" font-size="10" font-weight="700" fill="#0f172a">Dashboard</text>
+      <line x1="760" y1="30" x2="760" y2="400" stroke="#cbd5e1" stroke-width="1.5"/>
+
+      <!-- Messages -->
+      <line x1="80" y1="55" x2="250" y2="55" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="165" y="50" text-anchor="middle" font-size="8" fill="#3b82f6">Arrivee porte</text>
+
+      <line x1="250" y1="75" x2="420" y2="75" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="335" y="70" text-anchor="middle" font-size="8" fill="#3b82f6">POST /events</text>
+
+      <line x1="420" y1="95" x2="590" y2="95" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="505" y="90" text-anchor="middle" font-size="8" fill="#22c55e">INSERT Event + Cycle</text>
+
+      <line x1="420" y1="115" x2="760" y2="115" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="590" y="110" text-anchor="middle" font-size="8" fill="#f59e0b">WS: nouveau camion</text>
+
+      <line x1="80" y1="150" x2="250" y2="150" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="165" y="145" text-anchor="middle" font-size="8" fill="#3b82f6">Bascule tare</text>
+
+      <line x1="250" y1="170" x2="420" y2="170" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="335" y="165" text-anchor="middle" font-size="8" fill="#3b82f6">POST event</text>
+
+      <line x1="420" y1="190" x2="590" y2="190" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="505" y="185" text-anchor="middle" font-size="8" fill="#22c55e">UPDATE Cycle</text>
+
+      <line x1="420" y1="210" x2="760" y2="210" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="590" y="205" text-anchor="middle" font-size="8" fill="#f59e0b">WS: maj position</text>
+
+      <line x1="80" y1="245" x2="250" y2="245" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="165" y="240" text-anchor="middle" font-size="8" fill="#3b82f6">Ensachage</text>
+
+      <line x1="250" y1="265" x2="420" y2="265" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="335" y="260" text-anchor="middle" font-size="8" fill="#3b82f6">POST event</text>
+
+      <line x1="420" y1="285" x2="590" y2="285" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="505" y="280" text-anchor="middle" font-size="8" fill="#22c55e">UPDATE Cycle</text>
+
+      <line x1="420" y1="305" x2="760" y2="305" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="590" y="300" text-anchor="middle" font-size="8" fill="#f59e0b">WS: maj position</text>
+
+      <line x1="80" y1="340" x2="250" y2="340" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="165" y="335" text-anchor="middle" font-size="8" fill="#3b82f6">Sortie usine</text>
+
+      <line x1="250" y1="360" x2="420" y2="360" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="335" y="355" text-anchor="middle" font-size="8" fill="#3b82f6">POST event</text>
+
+      <line x1="420" y1="380" x2="590" y2="380" stroke="#22c55e" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="505" y="375" text-anchor="middle" font-size="8" fill="#22c55e">CLOSE Cycle</text>
+
+      <line x1="420" y1="395" x2="760" y2="395" stroke="#ef4444" stroke-width="1.5" marker-end="url(#arrow3)"/>
+      <text x="590" y="390" text-anchor="middle" font-size="8" fill="#ef4444">WS: fin cycle</text>
+
+      <defs>
+        <marker id="arrow3" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L0,6 L7,3 z" fill="#64748b"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+  <div class="figure-caption">Figure 3.4 &mdash; Diagramme de sequence du cycle de vie complet d'un camion</div>
+
+  <h2>3.6 Diagramme de deploiement</h2>
+  <p>L'architecture de deploiement repose sur une stack conteneurisee Docker Compose, permettant un deploiement identique en environnement de developpement, de test, et de production. Le reverse proxy Nginx assure la terminaison SSL et la distribution des requetes statiques.</p>
+
+  <div class="svg-container">
+    <svg viewBox="0 0 800 380" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
+      <!-- Server Node -->
+      <rect x="200" y="20" width="400" height="340" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+      <text x="400" y="42" text-anchor="middle" font-size="12" font-weight="700" fill="#334155">Serveur Edge / Cloud (Docker Host)</text>
+
+      <!-- Nginx -->
+      <rect x="320" y="60" width="160" height="45" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+      <text x="400" y="80" text-anchor="middle" font-size="10" font-weight="700" fill="#1e40af">Nginx (Reverse Proxy)</text>
+      <text x="400" y="95" text-anchor="middle" font-size="8" fill="#475569">Port 80/443</text>
+
+      <!-- FastAPI -->
+      <rect x="230" y="130" width="140" height="50" rx="6" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+      <text x="300" y="150" text-anchor="middle" font-size="10" font-weight="700" fill="#166534">FastAPI Backend</text>
+      <text x="300" y="165" text-anchor="middle" font-size="8" fill="#166534">Port 8000</text>
+
+      <!-- React -->
+      <rect x="430" y="130" width="140" height="50" rx="6" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+      <text x="500" y="150" text-anchor="middle" font-size="10" font-weight="700" fill="#92400e">React Frontend</text>
+      <text x="500" y="165" text-anchor="middle" font-size="8" fill="#92400e">Port 3000</text>
+
+      <!-- PostgreSQL -->
+      <rect x="230" y="210" width="140" height="50" rx="6" fill="#fce7f3" stroke="#ec4899" stroke-width="2"/>
+      <text x="300" y="230" text-anchor="middle" font-size="10" font-weight="700" fill="#9d174d">PostgreSQL 16</text>
+      <text x="300" y="245" text-anchor="middle" font-size="8" fill="#9d174d">Port 5432</text>
+
+      <!-- Redis -->
+      <rect x="430" y="210" width="140" height="50" rx="6" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+      <text x="500" y="230" text-anchor="middle" font-size="10" font-weight="700" fill="#7e22ce">Redis 7</text>
+      <text x="500" y="245" text-anchor="middle" font-size="8" fill="#7e22ce">Port 6379</text>
+
+      <!-- Camera -->
+      <rect x="30" y="140" width="120" height="50" rx="6" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="90" y="160" text-anchor="middle" font-size="10" font-weight="700" fill="#0c4a6e">Camera IP</text>
+      <text x="90" y="175" text-anchor="middle" font-size="8" fill="#0c4a6e">Flux RTSP</text>
+
+      <!-- Mobile -->
+      <rect x="650" y="140" width="120" height="50" rx="6" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="2"/>
+      <text x="710" y="160" text-anchor="middle" font-size="10" font-weight="700" fill="#0c4a6e">Smartphone</text>
+      <text x="710" y="175" text-anchor="middle" font-size="8" fill="#0c4a6e">PWA Agent</text>
+
+      <!-- Connections -->
+      <line x1="150" y1="165" x2="230" y2="155" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow4)"/>
+      <line x1="570" y1="155" x2="650" y2="165" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow4)"/>
+      <line x1="400" y1="105" x2="300" y2="130" stroke="#64748b" stroke-width="1.5"/>
+      <line x1="400" y1="105" x2="500" y2="130" stroke="#64748b" stroke-width="1.5"/>
+      <line x1="300" y1="180" x2="300" y2="210" stroke="#64748b" stroke-width="1.5"/>
+      <line x1="500" y1="180" x2="500" y2="210" stroke="#64748b" stroke-width="1.5"/>
+      <line x1="370" y1="235" x2="430" y2="235" stroke="#64748b" stroke-width="1.5"/>
+
+      <!-- Docker icon -->
+      <rect x="360" y="290" width="80" height="35" rx="4" fill="#0f172a" opacity="0.9"/>
+      <text x="400" y="312" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">Docker</text>
+      <line x1="300" y1="260" x2="360" y2="300" stroke="#64748b" stroke-width="1"/>
+      <line x1="500" y1="260" x2="440" y2="300" stroke="#64748b" stroke-width="1"/>
+
+      <defs>
+        <marker id="arrow4" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L0,6 L7,3 z" fill="#64748b"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+  <div class="figure-caption">Figure 3.5 &mdash; Diagramme de deploiement physique du systeme</div>
+
+  <h2>3.7 Le pipeline ML &laquo; Zero-to-Hero &raquo;</h2>
+  <p>L'un des apports techniques majeurs de ce stage est la conception d'un pipeline d'apprentissage automatique <strong>auto-adaptatif</strong>, capable de fonctionner des le premier jour sans donnees historiques et de gagner en precision au fur et a mesure de l'accumulation des cycles.</p>
+
+  <table>
+    <tr><th>Niveau</th><th>Donnees requises</th><th>Modele</th><th>Precision</th><th>Latence</th></tr>
+    <tr><td><strong>0</strong></td><td>Aucune</td><td>Regles metier (seuils configurables)</td><td>Basique</td><td>Instantanee</td></tr>
+    <tr><td><strong>1</strong></td><td>50+ evenements</td><td>EWMA (moyenne mobile ponderee)</td><td>Moyenne</td><td>&lt; 10 ms</td></tr>
+    <tr><td><strong>2</strong></td><td>500+ evenements</td><td>Prophet + XGBoost</td><td>Elevée (MAPE ~12%)</td><td>&lt; 100 ms</td></tr>
+  </table>
+
+  <p>L'entrainement automatique s'execute toutes les 6 heures via un service dedie (<code>auto_train.py</code>). <strong>Prophet</strong> capture la saisonnalite journaliere (pics a 8h et 17h) et hebdomadaire (affluence moindre le week-end). <strong>XGBoost</strong> est teste en parallele ; s'il bat Prophet de plus de 5% de MAPE, il devient le modele de production. Les modeles sont persistes dans un volume Docker partage et charges a chaud sans interruption de service.</p>
+
+  <div class="warning-box">
+    <strong>Consideration de securite :</strong> les flux camera RTSP transitent sur le reseau local industriel et ne quittent jamais le perimetre de l'usine. Les donnees personnelles des chauffeurs (photos eventuelles) sont traitees conformement au reglement interne Holcim et aux exigences de la loi 09-08 marocaine relative a la protection des donnees a caractere personnel.
+  </div>
+</div>
+
+<!-- ==================== CHAPITRE 4 ==================== -->
+<div class="content">
+  <h1 class="chapter-title">Chapitre 4 &mdash; Implementation, Deploiement et Resultats</h1>
+
+  <h2>4.1 Le systeme de capture bi-mode</h2>
+  <p>La fiabilite d'un systeme de tracabilite en environnement industriel ne peut reposer sur un seul mode de capture. La poussiere de ciment, les variations d'eclairage diurnes, et les intemperies peuvent degrader significativement les performances d'une camera OCR. Smart-Truck-Tracker implemente donc trois modes de capture configurables par poste :</p>
+  <p>Le code source ne definit pas de constante <code>POSTE_CONFIG</code> fixe. La configuration par poste est persistee dans la table <code>PosteConfig</code> defini dans <code>backend/app/models.py</code>.</p>
+
+  <table>
+    <tr><th>Mode</th><th>Description</th><th>Ideal pour</th><th>Fiabilite</th></tr>
+    <tr><td><strong>Camera OCR</strong></td><td>L'IA (YOLOv8 + EasyOCR) detecte automatiquement la plaque</td><td>Conditions normales, eclairage stable</td><td>Variable selon la qualite de l'image</td></tr>
+    <tr><td><strong>Agent Mobile</strong></td><td>L'agent saisit ou corrige manuellement la plaque via la PWA</td><td>Conditions poussiereuses, camera degradee</td><td>Haute</td></tr>
+    <tr><td><strong>Hybride</strong></td><td>La camera tente d'abord ; les events douteux sont transmis a l'agent pour validation</td><td>Fiabilite maximale et audit humain</td><td>Haute</td></tr>
+  </table>
+
+  <p>Dans le flux reel actuel, <code>backend/app/services/cv_service.py</code> appelle <code>EventIngestionService.ingest_event(...)</code> pour creer l'event de camera. Le flag <code>Event.necesita_confirmacion</code> est positionne dans <code>backend/app/services/event_ingestion.py</code> et calculé avec la ligne suivante :</p>
+
+  <div class="code-block">
+necesita_confirmacion = bool(confiance_ocr is not None and confiance_ocr < 0.65)
+  </div>
+
+  <p>Concrètement, <code>backend/app/services/cv_service.py</code> transmet la confiance OCR lors de l'appel d'ingestion :</p>
+
+  <div class="code-block">
+                    event   = service.ingest_event(
+                        plaque=matched_plate,
+                        poste=poste,
+                        type_event=type_event,
+                        source="camera",
+                        confiance_ocr=round(ocr_conf, 3),
+                        image_path=image_path,
+                    )
+  </div>
+
+  <p>La page de confirmation humaine est <code>frontend/src/pages/ConfirmationPage.tsx</code>, qui appelle les endpoints <code>PATCH /api/events/{event_id}/confirm</code> ou <code>PATCH /api/events/{event_id}/reject</code> pour que l'agent confirme, corrige ou rejette l'event. Le flag est donc calculé au moment de l'ingestion de l'event, pas lors de la simple détection par caméra.</p>
+
+  <p>En mode simulation (<code>CV_MODE=simulation</code>), le backend n'utilise aujourd'hui que six immatriculations fixes dans <code>backend/app/services/cv_service.py</code> (<code>self.plaques</code>). Il n'existe pas de variable <code>SIM_SPEED_MULTIPLIER</code> dans le code actuel, donc la valeur de 80 camions/jour n'est pas supportée par l'implantation courante.</p>
+
+  <h2>4.2 Le dashboard superviseur et l'interface mobile</h2>
+  <p>Le <strong>Dashboard Superviseur</strong> constitue l'interface principale du systeme. Developpe en React 18 avec TypeScript, il se distingue par sa simplicite d'usage : concu pour etre consulte par des operateurs non specialistes de l'intelligence artificielle, il presente l'information logistique de maniere synthetique et immediatement actionnable.</p>
+
+  <div class="figure">
+    <img src="images/dashbord1.png" alt="Dashboard Superviseur">
+    <div class="figure-caption">Figure 4.1 &mdash; Dashboard temps reel : camions en cours, KPIs, alertes et poste bloquant</div>
+  </div>
+
+  <p>Les fonctionnalites cles du dashboard incluent :</p>
+  <ul>
+    <li><strong>Suivi temps reel</strong> via WebSocket &mdash; aucun rafraichissement manuel requis.</li>
+    <li><strong>Timeline visuelle</strong> du parcours de chaque camion dans l'usine.</li>
+    <li><strong>Alertes en temps reel</strong> pour les camions depassant les seuils d'attente configurables.</li>
+    <li><strong>Configuration des cameras</strong> par zone (mode Bi : Camera OCR + Agent Mobile).</li>
+    <li><strong>Predictions ETA</strong> : heure estimee d'arrivee aux futures etapes, basee sur le modele ML actif.</li>
+  </ul>
+
+  <p>L'<strong>interface mobile agent</strong> est une Progressive Web App (PWA) installable sur n'importe quel smartphone. Elle offre :</p>
+  <ul>
+    <li>Saisie rapide des evenements (entree/sortie) par poste operateur.</li>
+    <li>Capture photo optionnelle des plaques d'immatriculation.</li>
+    <li><strong>Geolocalisation GPS</strong> attachee a chaque evenement.</li>
+    <li>Signalement des retards avec selection de cause predefinie + commentaire libre.</li>
+    <li><strong>Mode hors-ligne</strong> : les saisies sont stockees localement (IndexedDB) et synchronisees automatiquement des le retour de la connectivite.</li>
+  </ul>
+
+  <div class="figure">
+    <img src="images/interface mobile.png" alt="Interface Mobile" style="max-height:500px;">
+    <div class="figure-caption">Figure 4.2 &mdash; Interface mobile agent : saisie terrain avec plaque, GPS et signalement de retard</div>
+  </div>
+
+  <h2>4.3 Les statistiques et analytiques</h2>
+  <p>La page <strong>Statistiques</strong> transforme les donnees brutes en insights actionnables pour la direction logistique. Elle propose des filtres temporels (Aujourd'hui / 7 derniers jours / 30 derniers jours) et des visualisations interactives via Recharts.</p>
+
+  <div class="figure">
+    <img src="images/statistiques.png" alt="Page Statistiques">
+    <div class="figure-caption">Figure 4.3 &mdash; Rapport statistique : KPIs, volume horaire, conformite par zone et causes de retard</div>
+  </div>
+
+  <p>Les indicateurs cles de performance (KPIs) calcules incluent :</p>
+  <ul>
+    <li><strong>Temps de cycle moyen, median, min et max</strong> vs objectif 120 min.</li>
+    <li><strong>Decomposition des retards par zone</strong> avec graphiques de conformite (reel vs objectif).</li>
+    <li><strong>Analyse des causes de retard</strong> : barres de progression et pourcentage du retard global par cause identifiee.</li>
+    <li><strong>Classement des transporteurs</strong> par minutes de retard cumulees.</li>
+    <li><strong>Repartition des sources de capture</strong> : Camera OCR vs Agent Mobile vs Hybride.</li>
+  </ul>
+
+  <h2>4.4 Tests de performance et benchmarking</h2>
+  <p>Des objectifs de performance ont été définis pour l'architecture, mais les tests de charge formels n'ont pas été réalisés durant la période de stage. Le tableau suivant présente les cibles techniques à valider lors d'une étape de qualification ultérieure.</p>
+
+  <table>
+    <tr><th>Scenario de test</th><th>Metrique</th><th>Objectif visé</th><th>Statut</th></tr>
+    <tr><td>Latence WebSocket</td><td>Temps event &rarr; dashboard</td><td>&lt; 200 ms</td><td style="color:#b45309;font-weight:700;">à valider</td></tr>
+    <tr><td>API REST (p95)</td><td>Temps de reponse</td><td>&lt; 80 ms</td><td style="color:#b45309;font-weight:700;">à valider</td></tr>
+    <tr><td>Camions simultanes</td><td>Capacite de charge</td><td>50+ sans degradation</td><td style="color:#b45309;font-weight:700;">à valider</td></tr>
+    <tr><td>Precision OCR</td><td>Taux de lecture correcte</td><td>&gt; 90%</td><td style="color:#b45309;font-weight:700;">à valider</td></tr>
+    <tr><td>Prediction Prophet</td><td>MAPE (Mean Abs. Perc. Error)</td><td>&lt; 20%</td><td style="color:#b45309;font-weight:700;">à valider</td></tr>
+    <tr><td>Deploiement full stack</td><td>Temps de mise en service</td><td>&lt; 3 min</td><td style="color:#b45309;font-weight:700;">à valider</td></tr>
+  </table>
+
+  <h2>4.5 Analyse critique des performances et limites</h2>
+  <p>Les tests menes en conditions de simulation realiste, sur une stack Docker Compose locale, ont permis de valider l'architecture globale. Cependant, plusieurs limites ont ete identifiees :</p>
+
+  <div class="warning-box">
+    <strong>Limites identifiees :</strong>
+    <ul style="margin-top:8px;">
+      <li><strong>Conditions reelles OCR :</strong> la poussiere de ciment et les reflets sur les plaques peuvent degrader la precision de l'OCR. Le mode Hybride a ete concu comme reponse a cette limite.</li>
+      <li><strong>Base d'entrainement ML :</strong> le passage au Niveau 2 (Prophet/XGBoost) necessite plusieurs semaines de donnees reelles. La periode de stage n'a pas permis cette accumulation, le pipeline a ete valide sur des donnees synthetiques realistes.</li>
+      <li><strong>Couverture reseau mobile :</strong> la PWA agent necessite une couverture 4G/WiFi sur l'ensemble du site. Certaines zones eloignees (carriere) pourraient necessiter des relais.</li>
+      <li>Les tests de charge formalisés (Locust, 100 utilisateurs concurrents) restent à mener avant un déploiement industriel — non réalisés durant la période de stage.</li>
+      <li><strong>Integration SAP :</strong> l'interface avec le systeme de gestion de production (SAP) n'a pas ete implementee dans cette version, constituant une evolution prioritaire pour le deploiement industriel.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ==================== CHAPITRE 5 ==================== -->
+<div class="content">
+  <h1 class="chapter-title">Chapitre 5 &mdash; Guide d'Installation et d'Utilisation</h1>
+
+  <h2>5.1 Prerequis techniques</h2>
+  <ul>
+    <li>Docker Desktop installe et lance (Windows / macOS / Linux), version 4.20+ recommandee.</li>
+    <li>Git installe (version 2.40+).</li>
+    <li>Minimum 4 Go de RAM alloues au moteur Docker.</li>
+    <li>Ports 80, 8000, 8080 disponibles sur la machine hote.</li>
+    <li>Une connexion Internet pour le telechargement initial des images de base.</li>
+  </ul>
+
+  <h2>5.2 Installation en trois commandes</h2>
+  <p>Le deploiement complet de la plateforme est entierement conteneurise. Aucune dependance systeme specifique n'est requise en dehors de Docker.</p>
+  <div class="code-block">
+<span class="comment"># 1. Cloner le repository depuis GitHub</span>
+git clone https://github.com/samya818/smart-plant-truck-tracker.git
+cd smart-plant-truck-tracker
+
+<span class="comment"># 2. Creer le fichier d'environnement a partir du modele</span>
+cp .env.example .env
+
+<span class="comment"># 3. Construire les images et lancer l'ensemble des services</span>
+docker compose up -d --build
+  </div>
+  <p>Les cinq services demarrent automatiquement : backend FastAPI, frontend React, PostgreSQL, Redis, et Nginx. L'option <code>-d</code> execute les conteneurs en arriere-plan (mode detache).</p>
+
+  <h2>5.3 Acces aux interfaces</h2>
+  <p>Une fois le deploiement termine, les interfaces suivantes sont accessibles depuis un navigateur web :</p>
+  <table>
+    <tr><th>Interface</th><th>URL</th><th>Description</th></tr>
+    <tr><td>Dashboard Superviseur</td><td>http://localhost</td><td>Ecran principal de monitoring temps reel</td></tr>
+    <tr><td>Statistiques</td><td>http://localhost/statistiques</td><td>Analytiques et rapports detailles</td></tr>
+    <tr><td>Agent Mobile</td><td>http://localhost/mobile</td><td>Interface terrain PWA (responsive)</td></tr>
+    <tr><td>Documentation API</td><td>http://localhost:8000/docs</td><td>Swagger UI interactive (OpenAPI 3.0)</td></tr>
+    <tr><td>Admin Base de Donnees</td><td>http://localhost:8080</td><td>Adminer (navigateur PostgreSQL)</td></tr>
+  </table>
+
+  <h2>5.4 Configuration des postes et modes de capture</h2>
+  <p>Depuis le Dashboard &rarr; Configuration, le superviseur peut definir, pour chaque poste (Porte, Parking, Bascule, Ensachage) :</p>
+  <ul>
+    <li>Le <strong>mode de capture</strong> : OCR, Agent Mobile, ou Hybride.</li>
+    <li>L'URL du <strong>flux RTSP</strong> de la camera (si mode OCR ou Hybride).</li>
+    <li>Le <strong>seuil d'attente maximum</strong> (en minutes) avant declenchement d'alerte.</li>
+    <li>L'<strong>activation/desactivation</strong> du poste (maintenance).</li>
+  </ul>
+
+  <h2>5.5 Ajout d'un nouveau transporteur</h2>
+  <p>L'ajout d'un transporteur a la liste blanche s'effectue via l'API REST ou directement en base via l'interface Adminer. Chaque camion est identifie par son immatriculation unique et rattache a un transporteur. Les cycles historiques permettent de calculer automatiquement les KPIs de performance par transporteur.</p>
+
+  <div class="code-block">
+<span class="comment"># Exemple d'ajout via l'API REST (curl)</span>
+curl -X POST <span class="string">"http://localhost:8000/api/transporteurs"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"nom": "Transport Meknes", "contact": "contact@tmeknes.ma", "est_whitelist": true}'</span>
+  </div>
+
+  <h2>5.6 Sauvegarde et restauration</h2>
+  <p>La base de donnees PostgreSQL est persiste via un volume Docker nomme. Pour effectuer une sauvegarde :</p>
+  <div class="code-block">
+docker exec smart-truck-tracker-db-1 pg_dump -U truck_user truck_db > backup_$(date +%Y%m%d).sql
+  </div>
+</div>
+
+<!-- ==================== CONCLUSION ==================== -->
+<div class="content">
+  <h1 class="chapter-title">Conclusion Generale et Perspectives</h1>
+
+  <h2>Bilan personnel et technique</h2>
+  <p>Ce stage de fin d'annee, effectue au sein de l'usine Holcim de Meknes, a constitue une experience formatrice a double titre. Sur le plan technique, il m'a permis de mettre en pratique l'ensemble des connaissances acquises en developpement full-stack, vision par ordinateur, et machine learning pour series temporelles : conception d'API REST asynchrones, gestion d'etats temps reel via WebSocket, modelisation relationnelle avancee, et deploiement conteneurise en environnement de production.</p>
+  <p>Sur le plan personnel, il m'a permis de developper autonomie, capacite d'argumentation methodologique et sensibilisation concrete aux enjeux de la logistique industrielle. La confrontation aux contraintes reelles d'un site de production &mdash; confidentialite des donnees, fiabilite requise en conditions difficiles, adoption par des operateurs non-techniciens &mdash; a constitue un apprentissage aussi precieux que les aspects purement algorithmiques du projet.</p>
+
+  <h2>Feuille de route pour un deploiement a l'echelle de l'usine</h2>
+  <p>Le systeme Smart-Truck-Tracker constitue une Preuve de Concept fonctionnelle et validee, dont l'architecture a ete concue pour permettre une transition progressive vers un deploiement reel. La feuille de route envisagee comprend :</p>
+  <ol>
+    <li><strong>Pilote controle sur un poste critique :</strong> deploiement d'une camera OCR reelle a la porte d'entree, en parallele du systeme existant, pendant une periode de calibration de deux semaines.</li>
+    <li><strong>Integration a l'infrastructure informatique existante :</strong> connexion au reseau industriel, synchronisation avec la base SAP pour l'alimentation automatique des bons de livraison, et integration aux systemes d'alerte existants (SMS, e-mail).</li>
+    <li><strong>Extension progressive a l'ensemble des postes :</strong> bascule, ensachage, et porte de sortie, avec deploiement des agents mobiles pour les postes non equipes en camera.</li>
+    <li><strong>Maturation du pipeline ML :</strong> accumulation de donnees reelles sur 3 a 6 mois pour atteindre le Niveau 2 (Prophet/XGBoost) et valider la precision predictive en conditions operationnelles.</li>
+    <li><strong>Integration IoT :</strong> a plus long terme, couplage avec des capteurs de poids automatiques, de detection de presence, et de temperature pour un systeme de tracabilite veritablement omnicanal.</li>
+  </ol>
+
+  <h2>Discussion complementaire : limites liees au contexte industriel</h2>
+  <p>L'absence d'acces aux flux camera reels pendant la phase de developpement, bien que legitime pour des raisons de confidentialite industrielle, a constitue une contrainte methodologique majeure. Les performances de l'OCR ont ete evaluees sur des jeux de donnees publics et une simulation interne, potentiellement differentes des conditions reelles du site (poussiere, eclairage mixte naturel/artificiel, angles de prise de vue contraints par l'architecture du site).</p>
+  <p>Face a ces limites, la demarche de PoC a l'architecture strictement generalisable constitue la reponse methodologique appropriee : plutot que de contourner la contrainte d'acces aux donnees, le projet en a fait un principe directeur de conception, garantissant qu'aucune reecriture du coeur algorithmique ne sera necessaire lors du passage a l'echelle reelle. La feuille de route de deploiement proposee &mdash; pilote controle sur une camera reelle avant extension progressive &mdash; constitue ainsi la suite logique et necessaire de ce travail.</p>
+  <blockquote>
+    &laquo; La capacite a concevoir, des la phase de conception, des systemes d'intelligence artificielle robustes aux contraintes reelles d'un contexte industriel &mdash; dont la confidentialite des donnees fait indiscutablement partie &mdash; est une competence d'ingenierie a part entiere, au moins aussi importante que la seule performance algorithmique des modeles. &raquo;
+  </blockquote>
+
+  <h2>Remerciements finaux</h2>
+  <p>Je souhaite renouveler mes remerciements a l'ensemble des personnes ayant contribue, directement ou indirectement, a la reussite de ce stage : mon encadrant professionnel Monsieur <strong>Saad FETOUH</strong> pour son accompagnement quotidien, mon encadrant academique Monsieur <strong>Noureddine ALLASSAK</strong> pour son suivi methodologique rigoureux, ainsi que l'ensemble des equipes du departement Logistique et du Service Informatique de l'usine Holcim de Meknes, dont la disponibilite et la pedagogie ont grandement contribue a la qualite de cette experience de terrain.</p>
+
+  <div class="signature-area">
+    <div class="signature-box">
+      <div class="signature-line">Signature de l'etudiante<br><strong>Samya LOUKILI</strong></div>
+    </div>
+    <div class="signature-box">
+      <div class="signature-line">Signature de l'encadrant professionnel<br><strong>M. Saad FETOUH</strong></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== ANNEXES ==================== -->
+<div class="content">
+  <h1 class="chapter-title">Annexes</h1>
+
+  <h2>Annexe A &mdash; Structure du repository GitHub</h2>
+  <div class="code-block">
+smart-plant-truck-tracker/
+|-- backend/
+|   |-- app/
+|   |   |-- api/              # Endpoints REST
+|   |   |-- core/             # Logique metier
+|   |   |-- ml/               # Pipeline Prophet + XGBoost
+|   |   |-- models/           # Modeles SQLAlchemy
+|   |   |-- schemas/          # Pydantic schemas
+|   |   |-- services/         # Services OCR, WebSocket
+|   |   |-- websocket/        # Gestion temps reel
+|   |   |-- main.py           # Point d'entree FastAPI
+|   |-- Dockerfile
+|   |-- requirements.txt
+|-- frontend/
+|   |-- src/
+|   |   |-- components/       # Composants React
+|   |   |-- pages/            # Dashboard, Stats, Mobile
+|   |   |-- hooks/            # Hooks custom (WebSocket)
+|   |   |-- services/         # Clients API
+|   |   |-- App.tsx
+|   |-- Dockerfile
+|   |-- package.json
+|-- docker-compose.yml
+|-- nginx.conf
+|-- .env.example
+|-- README.md
+  </div>
+
+  <h2>Annexe B &mdash; Technologies et versions</h2>
+  <table>
+    <tr><th>Composant</th><th>Technologie</th><th>Version</th><th>Licence</th></tr>
+    <tr><td>Backend</td><td>FastAPI (Python)</td><td>0.110+</td><td>MIT</td></tr>
+    <tr><td>Frontend</td><td>React + TypeScript</td><td>18.2+</td><td>MIT</td></tr>
+    <tr><td>Base de donnees</td><td>PostgreSQL</td><td>16</td><td>PostgreSQL</td></tr>
+    <tr><td>Cache / PubSub</td><td>Redis</td><td>7.2</td><td>BSD</td></tr>
+    <tr><td>Reverse Proxy</td><td>Nginx</td><td>1.25</td><td>BSD</td></tr>
+    <tr><td>Detection OCR</td><td>YOLOv8 (Ultralytics)</td><td>8.1+</td><td>AGPL</td></tr>
+    <tr><td>Prediction</td><td>Prophet (Meta)</td><td>1.1+</td><td>MIT</td></tr>
+    <tr><td>Prediction</td><td>XGBoost</td><td>2.0+</td><td>Apache 2.0</td></tr>
+    <tr><td>Conteneurisation</td><td>Docker Compose</td><td>2.24+</td><td>Apache 2.0</td></tr>
+  </table>
+
+  <h2>Annexe C &mdash; Glossaire metier</h2>
+  <table>
+    <tr><th>Terme</th><th>Definition</th></tr>
+    <tr><td>Cycle camion</td><td>Duree totale passee par un camion dans l'usine, de l'entree a la sortie</td></tr>
+    <tr><td>Poste</td><td>Zone fonctionnelle de l'usine (porte, parking, bascule, ensachage)</td></tr>
+    <tr><td>Evenement</td><td>Horodatage d'une entree ou sortie de camion a un poste donne</td></tr>
+    <tr><td>Seuil d'attente</td><td>Duree maximale autorisee pour un camion dans une zone avant alerte</td></tr>
+    <tr><td>Transporteur whitelist</td><td>Transporteur pre-enregistre et autorise a acceder au site</td></tr>
+    <tr><td>Mode hybride</td><td>Combinaison Camera OCR + validation agent pour fiabilite maximale</td></tr>
+  </table>
+</div>
+
+</body>
+</html>
