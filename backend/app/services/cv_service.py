@@ -30,17 +30,18 @@ from app.services.event_ingestion import EventIngestionService
 settings = get_settings()
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CONSTANTES PIPELINE RÉEL
+# CONSTANTES PIPELINE RÉEL & SEUILS DE DÉCISION
 # ──────────────────────────────────────────────────────────────────────────────
-YOLO_CLASSES_VEHICULES = {2, 5, 7}   # car, bus, truck (COCO)
-YOLO_CONFIDENCE_MIN    = 0.40        # seuil détection véhicule
-OCR_CONFIDENCE_MIN     = 0.45        # seuil confiance EasyOCR
-FUZZY_MATCH_RATIO      = 0.85        # similarité minimale stricte (évite les faux rattachements)
-AMBIGUITY_MARGIN       = 0.05        # écart minimal requis entre le 1er et le 2e candidat le plus proche
-PLATE_EXPAND_PX        = 30          # pixels d'expansion autour du bbox pour la plaque
-CAMERA_POLL_INTERVAL   = 2.0         # secondes entre deux captures par caméra
-DEBOUNCE_SECONDS       = 30          # ne pas re-créer un event pour le même camion < 30s
-MIN_DWELL_TIME_SECONDS = 45          # durée minimale dans un poste pour valider une sortie physique
+YOLO_CLASSES_VEHICULES   = {2, 5, 7}   # car, bus, truck (classes COCO — les camions bennes sont souvent étiquetés car/bus)
+YOLO_CONFIDENCE_MIN      = 0.40        # seuil détection véhicule
+OCR_ACCEPT_THRESHOLD     = 0.45        # seuil technique rejet EasyOCR (en-dessous = pur bruit)
+HUMAN_REVIEW_THRESHOLD   = 0.65        # seuil confirmation humaine (0.45 <= conf < 0.65 -> nécessite validation agent)
+FUZZY_MATCH_RATIO        = 0.85        # similarité minimale stricte (évite les faux rattachements)
+AMBIGUITY_MARGIN         = 0.05        # écart minimal requis entre le 1er et le 2e candidat le plus proche
+PLATE_EXPAND_PX          = 30          # pixels d'expansion autour du bbox pour la plaque
+CAMERA_POLL_INTERVAL     = 2.0         # secondes entre deux captures par caméra
+DEBOUNCE_SECONDS         = 30          # ne pas re-créer un event pour le même camion < 30s
+MIN_DWELL_TIME_SECONDS   = 45          # durée minimale dans un poste pour valider une sortie physique
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS OCR
@@ -335,8 +336,8 @@ class CVService:
 
                 print(f"[CV-OCR] Poste={poste.value} | Texte brut='{ocr_text}' | Conf={ocr_conf:.2f}")
 
-                if ocr_conf < OCR_CONFIDENCE_MIN:
-                    print(f"[CV-OCR] Confiance trop faible ({ocr_conf:.2f} < {OCR_CONFIDENCE_MIN}), ignoré")
+                if ocr_conf < OCR_ACCEPT_THRESHOLD:
+                    print(f"[CV-OCR] Rejet technique : confiance trop faible ({ocr_conf:.2f} < {OCR_ACCEPT_THRESHOLD})")
                     continue
 
                 # ── Fuzzy match DB durci ─────────────────────────────────────

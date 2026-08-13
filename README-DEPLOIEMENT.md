@@ -9,13 +9,13 @@
 - Accès réseau aux caméras IP de l'usine
 - Connexion Internet (pour télécharger les images Docker)
 
-## Installation (5 minutes)
+## Installation & Déploiement Rapide
 
 ### Étape 1 : Cloner le projet
 
 ```powershell
 git clone https://github.com/samya818/smart-plant-truck-tracker.git
-cd lafarge-camion-tracker
+cd smart-plant-truck-tracker
 ```
 
 ### Étape 2 : Exécuter le script de déploiement

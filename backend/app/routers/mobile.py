@@ -68,10 +68,12 @@ async def create_event_mobile(
     type_event: str = Form(..., pattern="^(entree|sortie)$"),
     agent_id: str = Form(...),
     client_event_id: Optional[str] = Form(None),
+    occurred_at: Optional[datetime] = Form(None),
     delay_cause_id: Optional[int] = Form(None),
     minutes_retard: Optional[int] = Form(None),
     gps_lat: Optional[float] = Form(None),
     gps_lon: Optional[float] = Form(None),
+    gps_accuracy_m: Optional[float] = Form(None),
     photo: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
@@ -133,9 +135,11 @@ async def create_event_mobile(
         confiance_ocr=confiance_ocr,
         gps_lat=gps_lat,
         gps_lon=gps_lon,
+        gps_accuracy_m=gps_accuracy_m,
         delay_cause_id=delay_cause_id,
         minutes_retard=minutes_retard,
         client_event_id=client_event_id,
+        horodatage=occurred_at,
     )
     return event
 

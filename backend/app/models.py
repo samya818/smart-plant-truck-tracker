@@ -100,7 +100,9 @@ class Event(Base):
     truck_id = Column(Integer, ForeignKey("trucks.id"), nullable=False)
     poste = Column(Enum(PosteType), nullable=False)
     type_event = Column(String(10), nullable=False)  # "entree" ou "sortie"
-    horodatage = Column(DateTime(timezone=True), server_default=func.now())
+    horodatage = Column(DateTime(timezone=True), server_default=func.now())  # occurred_at (instant réel sur le terrain)
+    received_at = Column(DateTime(timezone=True), server_default=func.now()) # instant d'ingestion serveur
+    sync_status = Column(String(20), default="realtime")                     # "realtime" | "synced_offline"
 
     # --- SOURCE DE L'ÉVÉNEMENT (audit) ---
     source = Column(String(20), default="camera")   # "camera" | "agent_mobile" | "manuel" | "hybrid"
@@ -121,6 +123,7 @@ class Event(Base):
     # --- Géolocalisation (si agent mobile) ---
     gps_lat = Column(Float, nullable=True)
     gps_lon = Column(Float, nullable=True)
+    gps_accuracy_m = Column(Float, nullable=True)
 
     truck = relationship("Truck", back_populates="events")
 

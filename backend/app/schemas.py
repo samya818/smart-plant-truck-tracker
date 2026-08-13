@@ -83,8 +83,11 @@ class EventCreate(EventBase):
 
 class EventRead(EventBase):
     id: int
+    client_event_id: Optional[str] = None
     truck_id: int
     horodatage: datetime
+    received_at: Optional[datetime] = None
+    sync_status: Optional[str] = "realtime"
     source: str
     agent_id: Optional[str] = None
     confiance_detection: Optional[float] = None
@@ -93,6 +96,9 @@ class EventRead(EventBase):
     cause: Optional[DelayCauseRead] = None
     minutes_retard: Optional[int] = None
     image_path: Optional[str] = None
+    gps_lat: Optional[float] = None
+    gps_lon: Optional[float] = None
+    gps_accuracy_m: Optional[float] = None
     truck: Optional[TruckRead] = None
     class Config:
         from_attributes = True

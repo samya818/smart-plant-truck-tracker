@@ -23,6 +23,43 @@ from app.cache import cache_invalidate
 GAP_ROUTE_MINUTES = 3        # Temps minimal entre sortie inférée et nouvelle entrée
 WATCHDOG_SEUIL_HOURS = 8     # Au-delà de 8h EN_COURS → EXPIRE
 
+# ──────────────────────────────────────────────────────────────────────────────
+# AUTOMATE D'ÉTATS FINI DU CYCLE CAMION (FSM Industrielle)
+# ──────────────────────────────────────────────────────────────────────────────
+# Modélise rigoureusement la séquence d'opérations dans la cimenterie :
+# ARRIVED_PORTE -> PARKING_IN -> PARKING_OUT -> TARE_IN -> TARE_OUT
+#   -> LOADING_IN -> LOADING_OUT -> GROSS_IN -> GROSS_OUT -> EXITED_PORTE
+VALID_FSM_TRANSITIONS: dict[str, list[str]] = {
+    "NONE": ["porte_usine:entree"],
+    "porte_usine:entree": ["parking:entree", "bascule:entree", "ensachage:entree"],
+    "parking:entree": ["parking:sortie"],
+    "parking:sortie": ["bascule:entree", "ensachage:entree"],
+    "bascule:entree": ["bascule:sortie"],
+    "bascule:sortie": ["ensachage:entree", "porte_usine:sortie", "parking:entree"],
+    "ensachage:entree": ["ensachage:sortie"],
+    "ensachage:sortie": ["bascule:entree", "porte_usine:sortie"],
+    "porte_usine:sortie": ["porte_usine:entree"],
+}
+
+class CycleStateMachine:
+    """Valide et audite les transitions d'état du cycle logistique."""
+
+    @staticmethod
+    def validate_transition(last_step: Optional[str], new_poste: PosteType, new_type: str) -> tuple[bool, str]:
+        """
+        Vérifie si la transition est légale selon la FSM d'usine.
+        Retourne (est_valide, message_audit).
+        """
+        current_key = last_step or "NONE"
+        candidate_key = f"{new_poste.value}:{new_type}"
+
+        allowed = VALID_FSM_TRANSITIONS.get(current_key, [])
+        if candidate_key in allowed:
+            return True, f"Transition FSM valide: {current_key} -> {candidate_key}"
+
+        # Permissivité avec alerte d'anomalie pour non-blocage opérationnel
+        return False, f"⚠️ Anomalie de séquence détectée: {current_key} -> {candidate_key} (étape sautée ou inversée)"
+
 
 class EventIngestionService:
     """Point d'entrée unique pour TOUT événement (caméra ou agent)."""
@@ -97,7 +134,14 @@ class EventIngestionService:
         if poste == PosteType.PORTE_USINE and type_event == "entree":
             self._auto_close_stale_cycle(truck.id, new_entry_time=now)
 
-        # ── 3. INFÉRENCE SORTIE → ENTRÉE manquante ──────────────────────────
+        # ── 3. VALIDATION FORMELLE AUTOMATE D'ÉTATS (FSM) ───────────────────
+        last_event = self.db.query(Event).filter(Event.truck_id == truck.id).order_by(Event.horodatage.desc()).first()
+        last_step_key = f"{last_event.poste.value}:{last_event.type_event}" if last_event else None
+        is_valid_transition, fsm_msg = CycleStateMachine.validate_transition(last_step_key, poste, type_event)
+        if not is_valid_transition:
+            print(f"[FSM Audit] {plaque} : {fsm_msg}")
+
+        # ── 4. INFÉRENCE SORTIE → ENTRÉE manquante ──────────────────────────
         if type_event == "sortie" and poste != PosteType.PORTE_USINE:
             self._infer_missing_entry(truck.id, poste, now, source)
 
@@ -110,7 +154,9 @@ class EventIngestionService:
             truck_id=truck.id,
             poste=poste,
             type_event=type_event,
-            horodatage=now,
+            horodatage=now,                        # occurred_at
+            received_at=datetime.utcnow(),         # received_at
+            sync_status="synced_offline" if client_event_id else "realtime",
             source=source,
             agent_id=agent_id,
             image_path=image_path,
