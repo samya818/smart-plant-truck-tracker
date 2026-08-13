@@ -1,0 +1,21 @@
+{
+  "total_images": 3,
+  "taux_detection_pct": 33.33333333333333,
+  "latence_moyenne_ms": 6390.4,
+  "details": [
+    {
+      "image": "camion_cimentier_holcim.jpg",
+      "camion_detecte": true,
+      "confiance_yolo": 0.0,
+      "texte_ocr": "-",
+      "latence_ms": 14534.0
+    },
+    {
+      "image": "camion_plateau_scania.jpg",
+      "camion_detecte": false,
+      "confiance_yolo": 0.0,
+      "texte_ocr": "-",
+      "latence_ms": 4637.2
+    }
+  ]
+}
