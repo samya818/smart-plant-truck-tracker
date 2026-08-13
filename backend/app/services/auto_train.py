@@ -53,7 +53,7 @@ class AutoTrainPipeline:
         df['lag_7d'] = df['y'].shift(24 * 7)
         df['rolling_mean_24h'] = df['y'].shift(1).rolling(window=24, min_periods=1).mean()
         df['rolling_std_24h'] = df['y'].shift(1).rolling(window=24, min_periods=1).std().fillna(0)
-        df = df.fillna(df.median(numeric_only=True))
+        df = df.fillna(df.median(numeric_only=True)).fillna(0)
         return df
 
     def run_training_pipeline(self) -> Dict[str, Any]:
