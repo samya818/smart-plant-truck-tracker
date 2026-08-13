@@ -630,6 +630,28 @@ Le mode `CV_MODE=real` n'empêche pas l'utilisation de l'agent mobile. Les deux 
 
 ---
 
+### ⚙️ Nouveaux Réglages & Améliorations Récentes
+
+#### 1. ⏱️ Vitesse de Simulation Configurable (`SIM_SPEED_MULTIPLIER`)
+Permet de calibrer le temps de cycle des camions simulés selon le besoin dans `.env` :
+- `SIM_SPEED_MULTIPLIER=1.0` : **Temps réel** (cycles de 60 à 120 min) &mdash; recommandé pour les démos réalistes et la production.
+- `SIM_SPEED_MULTIPLIER=60.0` : **Accéléré** (1s réelle = 1min simulée, cycles ~60s) &mdash; idéal pour tester l'UI et les flux.
+- `SIM_SPEED_MULTIPLIER=360.0` : **Ultra-rapide** (cycles ~10s) &mdash; pour les tests d'intégration et le remplissage de DB.
+
+#### 2. 🌍 OCR Multi-Pays & Formats de Plaques (`PLATE_COUNTRY`)
+Le pipeline OCR adapte automatiquement les modèles EasyOCR et les expressions régulières de validation selon l'usine :
+- `PLATE_COUNTRY=maroc` : Plaques marocaines (`12345-أ-1`), modèles `["ar", "en"]` avec préservation de l'alphabet arabe.
+- `PLATE_COUNTRY=algerie` : Plaques algériennes (`12345-123-16`), modèles `["ar", "fr"]`.
+- `PLATE_COUNTRY=tunisie` : Plaques tunisiennes (`123TUN4567`), modèles `["ar", "fr"]`.
+- `PLATE_COUNTRY=france` : Plaques européennes (`AA-123-AA`), modèle `["fr"]`.
+- `PLATE_COUNTRY=generique` : Tout format alphanumérique de 4 à 15 caractères.
+
+#### 3. 📡 PWA Offline-First & Synchronisation Automatique
+Pour assurer la continuité des opérations en cas de perte de connectivité (ex: carrières, hangars métalliques) :
+- **Service Worker (`sw.js`)** : Cache-First sur les assets statiques, Network-First avec fallback IndexedDB sur les mutations REST.
+- **Background Sync API** : Rejoue automatiquement les saisies en attente (`replayOfflineQueue`) dès le retour du réseau.
+- **Bandeau Interactif (`OfflineBanner.tsx`)** : Alerte visuelle rouge/jaune, compteur d'événements en attente, bouton de synchronisation manuelle et toast de confirmation vert.
+
 ---
 
 ### 🔬 Banc d'Essai & Benchmark sur Camions Réels
