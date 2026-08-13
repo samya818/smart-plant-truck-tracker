@@ -67,6 +67,7 @@ async def create_event_mobile(
     poste: PosteType = Form(...),
     type_event: str = Form(..., pattern="^(entree|sortie)$"),
     agent_id: str = Form(...),
+    client_event_id: Optional[str] = Form(None),
     delay_cause_id: Optional[int] = Form(None),
     minutes_retard: Optional[int] = Form(None),
     gps_lat: Optional[float] = Form(None),
@@ -134,6 +135,7 @@ async def create_event_mobile(
         gps_lon=gps_lon,
         delay_cause_id=delay_cause_id,
         minutes_retard=minutes_retard,
+        client_event_id=client_event_id,
     )
     return event
 

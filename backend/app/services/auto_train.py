@@ -273,17 +273,36 @@ class AutoTrainPipeline:
         """Exécution synchrone pour les tests et scripts."""
         return self.run_training_pipeline()
 
-    def _save_model(self, filename: str, model: Any, mae: float, n_samples: int):
+    def _save_model(self, filename: str, model: Any, new_mae: float, n_samples: int):
+        """
+        Sauvegarde conditionnelle (Champion vs Challenger) :
+        Ne remplace le modèle en production que si le nouveau candidat bat l'ancien champion.
+        Empêche toute régression silencieuse des prédictions.
+        """
+        path = os.path.join(self.MODEL_DIR, filename)
+        if os.path.exists(path):
+            try:
+                with open(path, 'rb') as f:
+                    old_artifact = pickle.load(f)
+                old_mae = old_artifact.get('mae', float('inf'))
+                if new_mae >= old_mae:
+                    print(f"[AutoTrain] 🛑 Modèle candidat REJETÉ pour {filename} : MAE={new_mae:.2f}m >= Champion existant MAE={old_mae:.2f}m (Pas de régression)")
+                    return
+                else:
+                    print(f"[AutoTrain] 🏆 Nouveau Champion promu pour {filename} : MAE={new_mae:.2f}m < Ancien={old_mae:.2f}m (+{(old_mae-new_mae):.2f}m de gain)")
+            except Exception as e:
+                print(f"[AutoTrain] Impossible de lire l'ancien champion ({e}), sauvegarde forcée.")
+
         artifact = {
             'model': model,
-            'mae': mae,
+            'mae': new_mae,
             'trained_at': datetime.now().isoformat(),
-            'n_samples': n_samples
+            'n_samples': n_samples,
         }
-        with open(os.path.join(self.MODELS_DIR, filename), 'wb') as f:
+        with open(path, 'wb') as f:
             pickle.dump(artifact, f)
+        print(f"[AutoTrain] Modèle {filename} enregistré avec succès ✓")
 
     def _save_metrics(self, metrics: dict):
         with open(self.METRICS_FILE, 'w') as f:
             json.dump(metrics, f, indent=2)
-

@@ -96,6 +96,7 @@ class Event(Base):
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, index=True)
+    client_event_id = Column(String(64), unique=True, index=True, nullable=True)  # UUID idempotent client (PWA offline sync)
     truck_id = Column(Integer, ForeignKey("trucks.id"), nullable=False)
     poste = Column(Enum(PosteType), nullable=False)
     type_event = Column(String(10), nullable=False)  # "entree" ou "sortie"

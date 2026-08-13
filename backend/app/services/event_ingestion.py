@@ -48,11 +48,19 @@ class EventIngestionService:
         cause_retard_libre: Optional[str] = None,
         minutes_retard: Optional[int] = None,
         horodatage: Optional[datetime] = None,
+        client_event_id: Optional[str] = None,
     ) -> Event:
         """
-        Crée un événement de manière robuste.
-        Gère automatiquement les cycles incomplets.
+        Crée un événement de manière robuste et idempotente.
+        Gère automatiquement les cycles incomplets et les re-jeux offline.
         """
+        # ── 0. IDEMPOTENCE STRICTE CLIENT (PWA Offline Queue Replay) ─────────
+        if client_event_id:
+            existing_event = self.db.query(Event).filter(Event.client_event_id == client_event_id).first()
+            if existing_event:
+                print(f"[Ingestion] ♻️ Événement idempotent ignoré (déjà existant en DB) : client_event_id={client_event_id}")
+                return existing_event
+
         truck = self._get_or_create_truck(plaque)
         now = horodatage or datetime.utcnow()
         if now.tzinfo is not None:
@@ -77,6 +85,8 @@ class EventIngestionService:
             if source == "agent_mobile" and recent.source == "camera":
                 recent.source = "hybrid"
                 recent.agent_id = agent_id
+                if client_event_id and not recent.client_event_id:
+                    recent.client_event_id = client_event_id
                 if delay_cause_id:
                     recent.delay_cause_id = delay_cause_id
                 self.db.commit()
@@ -96,6 +106,7 @@ class EventIngestionService:
 
         # ── Création de l'événement ──────────────────────────────────────────
         event = Event(
+            client_event_id=client_event_id,
             truck_id=truck.id,
             poste=poste,
             type_event=type_event,

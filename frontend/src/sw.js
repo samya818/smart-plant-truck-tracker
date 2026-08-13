@@ -41,11 +41,13 @@ function openOfflineDB() {
 
 async function enqueueOfflineRequest(request) {
   const body = await request.clone().text().catch(() => '');
+  const clientEventId = `offline-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   const entry = {
     url: request.url,
     method: request.method,
     headers: Object.fromEntries(request.headers.entries()),
     body,
+    clientEventId,
     timestamp: Date.now(),
   };
   const db = await openOfflineDB();
@@ -53,7 +55,7 @@ async function enqueueOfflineRequest(request) {
     const tx = db.transaction(OFFLINE_QUEUE_STORE, 'readwrite');
     tx.objectStore(OFFLINE_QUEUE_STORE).add(entry);
     tx.oncomplete = () => {
-      console.log('[SW] Requête mise en file offline:', entry.url);
+      console.log('[SW] Requête mise en file offline avec clientEventId:', clientEventId);
       resolve();
     };
     tx.onerror = (e) => reject(e.target.error);

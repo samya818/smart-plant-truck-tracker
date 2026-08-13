@@ -387,16 +387,22 @@ erDiagram
 
 ---
 
-## 🚀 Déploiement Industriel Clé en Main (Ready-to-Deploy)
+## 🚀 Déploiement & Environnement d'Exécution (Deployment-Ready PoC)
 
-La plateforme est conçue pour un **déploiement immédiat en environnement industriel** sans aucune installation de dépendances locales complexes (Python, PostgreSQL, Redis ou Node.js ne sont pas nécessaires sur l'hôte).
+La plateforme est architecturée comme un **Prototype Industriel Déployable (Proof of Concept)** conteneurisé, prêt à être lancé en environnement de test ou pré-production d'usine sans dépendances locales hôtes.
 
-### 🐧 Option 1 : Déploiement sur Serveur d'Usine Linux (Ubuntu / Debian / RHEL)
-Une seule commande suffit pour initialiser et lancer l'ensemble de la stack :
+### 🐧 Option 1 : Déploiement Rapide sur Serveur d'Usine Linux (Ubuntu / Debian / RHEL)
+Une seule commande initialise et lance l'ensemble de la stack conteneurisée :
 ```bash
 chmod +x deploy.sh && ./deploy.sh
 ```
-*Le script configure automatiquement le fichier `.env`, active le mode réel d'usine (`CV_MODE=real`), crée les volumes persistants et lance les conteneurs en arrière-plan.*
+*Le script initialise le fichier `.env`, active le mode d'ingestion désiré, initialise les volumes PostgreSQL/Redis et lance les services via Docker Compose.*
+
+> 🛡️ **Checklist pour Passage en Production Critique (Hard Production) :**
+> - Mise en place d'un reverse-proxy Nginx/Traefik avec chiffrement **TLS (HTTPS/WSS)**.
+> - Gestion sécurisée des secrets via HashiCorp Vault ou KMS (au lieu de `.env` en clair).
+> - Activation de l'authentification forte & RBAC sur les endpoints de configuration.
+> - Mise en place d'une rétention de sauvegardes automatisée PostgreSQL (`pg_dump` périodique).
 
 ---
 
@@ -694,13 +700,15 @@ camion_semi_remorque.jpg         | ❌ NON (Angle)   | Non lue        |  4 513 m
 ================================================================================
 ```
 
-#### 💡 Justification Industrielle du Système Bi-Mode Hybride
-> **Enseignement Métier** : Les tests en conditions réelles prouvent qu'en environnement cimentier (poussière, reflets, angles obliques), **aucune caméra 100% automatique ne peut garantir une traçabilité sans faille**.
+#### 💡 Modélisation de la Traçabilité Composite & Tolérance de Pannes
+> **Enseignement Métier & Limite de l'OCR Pur** :
+> En environnement cimentier sévère (poussière de clinker, reflets métalliques, angles d'approche obliques), un modèle de vision seul présente une probabilité d'erreur non nulle ($P(\text{échec OCR}) > 0$).
 >
-> C'est la raison d'être de notre **Architecture Bi-Mode Hybride** :
-> 1. La caméra lit automatiquement les plaques en conditions normales.
-> 2. Dès qu'un camion est mal cadré ou que la confiance OCR est faible ($< 65\%$), une alerte est transmise à l'**Agent Mobile (PWA)** pour confirmation humaine immédiate.
-> 3. **Résultat : Zéro camion perdu et 100% de fiabilité logistique.**
+> **L'Architecture Bi-Mode Hybride résout ce défi par réconciliation probabiliste :**
+> $$\text{Taux de Traçabilité Global} = 1 - \big(P(\text{échec caméra}) \times P(\text{non-saisie agent})\big)$$
+> 1. **Capture Primaire (Automatique)** : La caméra capture le flux continu avec seuil durci ($0.85$).
+> 2. **Fallback Secondaire (Humain dans la boucle)** : Dès qu'une incertitude est détectée ($\text{confiance} < 0.65$ ou anomalie de cadrage), l'**Agent Mobile (PWA)** est notifié pour confirmation terrain.
+> 3. **Résilience Opérationnelle** : La logistique ne dépend pas d'un capteur unique, garantissant une continuité de service même en cas d'indisponibilité matérielle.
 
 ---
 

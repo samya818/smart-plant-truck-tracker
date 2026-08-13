@@ -274,16 +274,15 @@ class CVService:
     # PIPELINE RÉEL — capture + détection + OCR
     # ══════════════════════════════════════════════════════════════════════════
 
-    def process_frame(self, frame, poste: PosteType, db) -> Optional[dict]:
+    def process_frame(self, frame, poste: PosteType, db, camera_direction: Optional[str] = None) -> Optional[dict]:
         """
         Pipeline complet sur un frame déjà capturé :
-        1. YOLO → détecte les véhicules
-        2. EasyOCR → lit le texte dans chaque bbox détecté
-        3. Fuzzy match → trouve l'immatriculation en DB
-        4. Debounce → évite les doublons < DEBOUNCE_SECONDS
-        5. Ingestion → crée l'Event en DB
-
-        Retourne un dict de résultat ou None si rien n'est détecté.
+        1. YOLO → détecte les véhicules (classes COCO 2=car, 5=bus, 7=truck car les camions sont parfois étiquetés car/bus)
+        2. EasyOCR → lit le texte dans chaque bbox détecté (multilingue)
+        3. Fuzzy match durci → seuil 0.85 et alerte d'ambiguïté
+        4. Direction caméra explicite ou automate d'états
+        5. Debounce → évite les doublons < DEBOUNCE_SECONDS
+        6. Ingestion → crée l'Event en DB de façon robuste
         """
         import cv2
         import numpy as np
@@ -356,8 +355,11 @@ class CVService:
                     continue
                 self._debounce[key] = now
 
-                # ── Déduction type_event avec automate d'états ───────────────
-                type_event = self._infer_event_type(matched_plate, poste, db)
+                # ── Déduction type_event (Mapping explicite caméra ou Automate d'états) ──
+                if camera_direction in ("entree", "sortie"):
+                    type_event = camera_direction
+                else:
+                    type_event = self._infer_event_type(matched_plate, poste, db)
 
                 # ── Sauvegarde frame annoté ───────────────────────────────────
                 annotated = frame.copy()
