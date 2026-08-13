@@ -6,26 +6,18 @@ from app.database import SessionLocal
 from app.services.anomaly_detector import AnomalyDetector
 
 
-def test_anomaly_detector_initialization():
+def test_anomaly_detector_initialization(db):
     """Vérifie l'initialisation du détecteur d'anomalies avec la session DB."""
-    db = SessionLocal()
-    try:
-        detector = AnomalyDetector(db)
-        assert detector.db is not None
-    finally:
-        db.close()
+    detector = AnomalyDetector(db)
+    assert detector.db is not None
 
 
-def test_anomaly_detector_poste_bloquant():
+def test_anomaly_detector_poste_bloquant(db):
     """Vérifie que l'algorithme retourne une analyse sur les postes bloquants."""
-    db = SessionLocal()
-    try:
-        detector = AnomalyDetector(db)
-        bloquant_info = detector.get_poste_bloquant()
-        assert isinstance(bloquant_info, dict)
-        assert "poste_bloquant" in bloquant_info
-    finally:
-        db.close()
+    detector = AnomalyDetector(db)
+    bloquant_info = detector.get_poste_bloquant()
+    assert isinstance(bloquant_info, dict)
+    assert "poste_bloquant" in bloquant_info
 
 
 def test_anomaly_detector_calcul_retard():

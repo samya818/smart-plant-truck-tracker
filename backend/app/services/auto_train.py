@@ -184,9 +184,9 @@ class AutoTrainPipeline:
 
             # Sauvegarde conditionnelle des modèles (Champion vs Challenger)
             if 'prophet' in candidats:
-                self._save_model('prophet_champion.pkl', candidats['prophet'], models_metrics['prophet']['mae'], len(df))
+                self._save_model('prophet_champion.pkl', candidats['prophet'], models_metrics['prophet'], len(df), train_median_y)
             if 'xgboost' in candidats:
-                self._save_model('xgboost_champion.pkl', candidats['xgboost'], models_metrics['xgboost']['mae'], len(df))
+                self._save_model('xgboost_champion.pkl', candidats['xgboost'], models_metrics['xgboost'], len(df), train_median_y)
 
             # Enregistrement des métriques vérifiées
             result_payload = {
@@ -194,6 +194,7 @@ class AutoTrainPipeline:
                 "target_variable": "duree_totale_cycle_minutes (y_t = t_out - t_in)",
                 "validation_method": "3-Way Temporal Split (70% Train / 15% Val Early Stopping / 15% Test Indépendant)",
                 "anti_leakage_applied": True,
+                "feature_schema_version": "2.0.0",
                 "train_median_imputed": round(train_median_y, 2),
                 "n_samples_total": len(df),
                 "n_train": len(train_df),
@@ -213,13 +214,14 @@ class AutoTrainPipeline:
         """Exécution synchrone pour les tests et scripts."""
         return self.run_training_pipeline()
 
-    def _save_model(self, filename: str, model: Any, new_mae: float, n_samples: int):
+    def _save_model(self, filename: str, model: Any, metrics: dict, n_samples: int, train_median: float):
         """
-        Sauvegarde conditionnelle (Champion vs Challenger) :
-        Ne remplace le modèle en production que si le nouveau candidat bat l'ancien champion.
-        Empêche toute régression silencieuse des prédictions.
+        Sauvegarde conditionnelle (Champion vs Challenger) avec versionnement d'artefact :
+        Consigne l'empreinte de schéma, la version des caractéristiques et les métriques multi-critères.
         """
         path = os.path.join(self.MODEL_DIR, filename)
+        new_mae = metrics.get('mae', float('inf'))
+
         if os.path.exists(path):
             try:
                 with open(path, 'rb') as f:
@@ -236,12 +238,16 @@ class AutoTrainPipeline:
         artifact = {
             'model': model,
             'mae': new_mae,
+            'metrics': metrics,
+            'feature_schema_version': "2.0.0",
+            'feature_names': FEATURE_COLUMNS,
+            'train_median_imputed': train_median,
             'trained_at': datetime.now().isoformat(),
             'n_samples': n_samples,
         }
         with open(path, 'wb') as f:
             pickle.dump(artifact, f)
-        print(f"[AutoTrain] Modèle {filename} enregistré avec succès ✓")
+        print(f"[AutoTrain] Modèle {filename} (v2.0.0) enregistré avec succès ✓")
 
     def _save_metrics(self, metrics: dict):
         with open(self.METRICS_FILE, 'w') as f:

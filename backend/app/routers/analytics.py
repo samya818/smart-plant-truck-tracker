@@ -32,11 +32,13 @@ def get_durees_moyennes(db: Session = Depends(get_db)):
         return cached
 
     depuis = datetime.utcnow() - timedelta(days=30)
-    # Filtre uniquement les cycles réalistes (duree_total >= 10 min) pour ne pas polluer avec les anciens tests
+    # Filtre uniquement les cycles réalistes (duree_total >= 10 min, non anomalie)
+    # pour ne pas polluer les moyennes avec des cycles inférés ou auto-fermés
     cycles = db.query(Cycle).filter(
         Cycle.status == TruckStatus.TERMINE,
         Cycle.entree_porte >= depuis,
-        Cycle.duree_total >= 10.0
+        Cycle.duree_total >= 10.0,
+        Cycle.est_anomalie == False  # noqa: E712 — SQLAlchemy ne supporte pas `is False`
     ).all()
 
     if len(cycles) < 10:
@@ -251,7 +253,9 @@ def get_rapport(
 
     # ── Cycles période actuelle ───────────────────────────────────────────
     cycles_all = db.query(Cycle).filter(Cycle.entree_porte >= date_debut).all()
-    cycles_termines = [c for c in cycles_all if c.status == TruckStatus.TERMINE]
+    # Pour les KPI de durées moyennes, on exclut les cycles anomalie (inférés, auto-fermés, FSM invalides)
+    # afin d'éviter que des durées artificielles de 1 min ne contamine les statistiques usine.
+    cycles_termines = [c for c in cycles_all if c.status == TruckStatus.TERMINE and not c.est_anomalie]
     cycles_en_cours = [c for c in cycles_all if c.status == TruckStatus.EN_COURS]
     cycles_anomalie = [c for c in cycles_all if c.est_anomalie]
 

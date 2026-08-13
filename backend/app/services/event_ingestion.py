@@ -169,9 +169,19 @@ class EventIngestionService:
             cause_retard_libre=cause_retard_libre,
             minutes_retard=minutes_retard,
         )
-        self.db.add(event)
-        self.db.commit()
-        self.db.refresh(event)
+        # ── Persistance avec gestion atomique des collisions d'idempotence ──
+        try:
+            self.db.add(event)
+            self.db.commit()
+            self.db.refresh(event)
+        except Exception as e:
+            self.db.rollback()
+            if client_event_id:
+                existing = self.db.query(Event).filter(Event.client_event_id == client_event_id).first()
+                if existing:
+                    print(f"[Ingestion] ♻️ Collision concurrente interceptée avec succès : client_event_id={client_event_id}")
+                    return existing
+            raise e
 
         self._update_cycle(truck.id, poste, type_event, now)
 

@@ -180,10 +180,11 @@ class PredictionService:
                 Cycle.entree_porte <= t_in
             ).order_by(Cycle.entree_porte.desc()).limit(10).all()
 
-            recent_durations = [float(r[0]) for r in reversed(recents)]
+            recent_durations = [float(r[0]) for r in reversed(recents)] if recents else []
+            train_median = float(artifact.get('train_median_imputed', 90.0))
 
             # Inférence avec le vecteur unifié EXACT (13 colonnes)
-            df_vector = build_single_inference_vector(t_in, recent_durations)
+            df_vector = build_single_inference_vector(t_in, recent_durations, train_median_y=train_median)
             dmatrix = xgb.DMatrix(df_vector)
             yhat = float(model.predict(dmatrix)[0])
             total_estime = max(30.0, yhat)

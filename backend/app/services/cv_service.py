@@ -20,7 +20,7 @@ if not hasattr(PIL.Image, 'ANTIALIAS'):
     PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple, List, Dict
 
 from app.config import get_settings
 from app.database import SessionLocal
