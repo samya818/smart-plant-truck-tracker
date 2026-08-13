@@ -1,21 +1,34 @@
 {
-  "total_images": 3,
-  "taux_detection_pct": 33.33333333333333,
-  "latence_moyenne_ms": 6390.4,
+  "taux_detection_pct": 50.0,
+  "temps_moyen_ms": 11252.3,
   "details": [
     {
-      "image": "camion_cimentier_holcim.jpg",
-      "camion_detecte": true,
+      "image": "camion_volvo_citerne.jpg",
+      "detecte": false,
       "confiance_yolo": 0.0,
-      "texte_ocr": "-",
-      "latence_ms": 14534.0
+      "plaque_ocr": "Non lue",
+      "temps_ms": 4660.0
     },
     {
-      "image": "camion_plateau_scania.jpg",
-      "camion_detecte": false,
+      "image": "camion_benne_scania.jpg",
+      "detecte": true,
+      "confiance_yolo": 0.873,
+      "plaque_ocr": "CIISIOICS",
+      "temps_ms": 24723.6
+    },
+    {
+      "image": "camion_poids_lourd_holcim.jpg",
+      "detecte": true,
       "confiance_yolo": 0.0,
-      "texte_ocr": "-",
-      "latence_ms": 4637.2
+      "plaque_ocr": "Non lue",
+      "temps_ms": 11111.7
+    },
+    {
+      "image": "camion_semi_remorque.jpg",
+      "detecte": false,
+      "confiance_yolo": 0.0,
+      "plaque_ocr": "Non lue",
+      "temps_ms": 4513.9
     }
   ]
 }
