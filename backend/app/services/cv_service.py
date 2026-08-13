@@ -15,6 +15,9 @@ import os
 import re
 import random
 import unicodedata
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = PIL.Image.Resampling.LANCZOS
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -156,8 +159,13 @@ class CVService:
             (PosteType.PORTE_USINE, "sortie"),
         ]
         self.plaques = [
-            "12345-أ-1", "67890-ب-2", "11111-د-3",
-            "22222-و-4", "33333-ط-5", "44444-س-6",
+            "12345-أ-1", "67890-ب-2", "11111-د-3", "22222-و-4", "33333-ط-5",
+            "44444-س-6", "55555-ه-7", "66666-ج-8", "77777-ح-9", "88888-خ-10",
+            "99999-ر-11", "12346-ز-12", "23456-س-13", "34567-ش-14", "45678-ص-15",
+            "56789-ض-16", "67891-ط-17", "78912-ظ-18", "89123-ع-19", "91234-غ-20",
+            "13579-ف-21", "24680-ق-22", "35791-ك-23", "46802-ل-24", "57913-م-25",
+            "68024-ن-26", "79135-ه-27", "80246-و-28", "91357-ي-29", "10247-أ-30",
+            "21358-ب-31", "32469-د-32", "43570-ج-33", "54681-ح-34", "65792-خ-35"
         ]
         self.sim_state: dict[str, dict] = {}
 
@@ -169,10 +177,19 @@ class CVService:
         """Charge YOLOv8n en mémoire (lazy, une seule fois)."""
         if self._yolo_model is not None:
             return self._yolo_model
-        from ultralytics import YOLO
-        print("[CV] Chargement YOLOv8n...")
-        self._yolo_model = YOLO("yolov8n.pt")
-        print("[CV] YOLOv8n chargé ✓")
+        import torch
+        _orig_torch_load = torch.load
+        def _safe_torch_load(*args, **kwargs):
+            kwargs['weights_only'] = False
+            return _orig_torch_load(*args, **kwargs)
+        torch.load = _safe_torch_load
+        try:
+            from ultralytics import YOLO
+            print("[CV] Chargement YOLOv8n...")
+            self._yolo_model = YOLO("yolov8n.pt")
+            print("[CV] YOLOv8n chargé ✓")
+        finally:
+            torch.load = _orig_torch_load
         return self._yolo_model
 
     def _load_ocr(self):
@@ -535,44 +552,47 @@ class CVService:
         if plaque not in self.sim_state:
             self.sim_state[plaque] = {"index": 0}
 
-        step_delays = [
-            random.randint(5, 10),
-            random.randint(10, 30),
-            random.randint(5, 10),
-            random.randint(8, 20),
-            random.randint(5, 10),
-            random.randint(15, 40),
-            random.randint(5, 10),
-            random.randint(5, 15),
-            random.randint(5, 10),
-            random.randint(20, 60),
-        ]
+        multiplier = max(1.0, float(settings.sim_speed_multiplier))
+
+        # Horloge virtuelle par camion pour enregistrer de vraies durées en DB
+        sim_current_time = datetime.utcnow()
+
+        def _gen_delays_minutes():
+            # Délais réalistes (en minutes réelles) pour chaque étape du cycle
+            return [
+                random.uniform(1, 3),    # 0. Porte entrée (1-3 min)
+                random.uniform(12, 35),  # 1. Parking attente (12-35 min)
+                random.uniform(1, 3),    # 2. Parking sortie (1-3 min)
+                random.uniform(2, 5),    # 3. Bascule tare entrée (2-5 min)
+                random.uniform(6, 18),   # 4. Bascule tare pesage (6-18 min)
+                random.uniform(25, 52),  # 5. Ensachage chargement (25-52 min)
+                random.uniform(2, 5),    # 6. Ensachage fin (2-5 min)
+                random.uniform(6, 18),   # 7. Bascule brut retour (6-18 min)
+                random.uniform(1, 3),    # 8. Bascule brut sortie (1-3 min)
+                random.uniform(5, 12),   # 9. Porte sortie usine (5-12 min)
+            ]
+
+        step_delays_min = _gen_delays_minutes()
 
         # Cache des modes de capture par poste (recharger toutes les 5 min)
         poste_modes: dict[PosteType, CaptureMode] = {}
         modes_loaded_at: float = 0.0
         import time
+        from datetime import timedelta
 
         while True:
             state = self.sim_state[plaque]
             idx   = state["index"]
             poste, type_event = self.postes_cycle[idx]
 
-            await asyncio.sleep(step_delays[idx])
+            delay_min = step_delays_min[idx]
+            sleep_sec = max(1.0, (delay_min * 60.0) / multiplier)
+
+            await asyncio.sleep(sleep_sec)
+            sim_current_time += timedelta(minutes=delay_min)
 
             if idx == len(self.postes_cycle) - 1:
-                step_delays = [
-                    random.randint(5, 10),
-                    random.randint(10, 30),
-                    random.randint(5, 10),
-                    random.randint(8, 20),
-                    random.randint(5, 10),
-                    random.randint(15, 40),
-                    random.randint(5, 10),
-                    random.randint(5, 15),
-                    random.randint(5, 10),
-                    random.randint(20, 60),
-                ]
+                step_delays_min = _gen_delays_minutes()
 
             # ── Lecture du capture_mode depuis la DB (avec cache 5 min) ─────
             now_ts = time.monotonic()
@@ -588,8 +608,6 @@ class CVService:
                     db_cfg.close()
 
             # ── capture_mode détermine si une confiance OCR est crédible ────
-            # AGENT  → pas de caméra du tout → pas de confiance_ocr
-            # CAMERA / HYBRID → caméra présente → confiance simulée
             mode = poste_modes.get(poste, CaptureMode.AGENT)
             if mode == CaptureMode.AGENT:
                 confiance = None
@@ -608,6 +626,7 @@ class CVService:
                     type_event=type_event,    # type: ignore
                     source=source_tag,
                     confiance_ocr=confiance,
+                    horodatage=sim_current_time,
                 )
                 print(
                     f"[CV-Sim] {plaque} | {poste.value} | {type_event} "

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     simulation_days: int = 30
     simulation_trucks_per_day: int = 80
+    sim_speed_multiplier: float = 60.0  # 1 seconde simulée = 1 minute réelle
 
     seuil_attente_parking_max: int = 30
     seuil_bascule_max: int = 15
