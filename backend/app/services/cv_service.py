@@ -35,10 +35,12 @@ settings = get_settings()
 YOLO_CLASSES_VEHICULES = {2, 5, 7}   # car, bus, truck (COCO)
 YOLO_CONFIDENCE_MIN    = 0.40        # seuil détection véhicule
 OCR_CONFIDENCE_MIN     = 0.45        # seuil confiance EasyOCR
-FUZZY_MATCH_RATIO      = 0.70        # similarité minimale pour accepter une plaque
+FUZZY_MATCH_RATIO      = 0.85        # similarité minimale stricte (évite les faux rattachements)
+AMBIGUITY_MARGIN       = 0.05        # écart minimal requis entre le 1er et le 2e candidat le plus proche
 PLATE_EXPAND_PX        = 30          # pixels d'expansion autour du bbox pour la plaque
 CAMERA_POLL_INTERVAL   = 2.0         # secondes entre deux captures par caméra
 DEBOUNCE_SECONDS       = 30          # ne pas re-créer un event pour le même camion < 30s
+MIN_DWELL_TIME_SECONDS = 45          # durée minimale dans un poste pour valider une sortie physique
 
 # ──────────────────────────────────────────────────────────────────────────────
 # HELPERS OCR
@@ -119,31 +121,43 @@ def _similarity(a: str, b: str) -> float:
     return (2 * lcs) / (m + n)
 
 
-def _match_plate_in_db(ocr_text: str, db) -> Optional[str]:
+def _match_plate_in_db(ocr_text: str, db) -> Optional[Tuple[str, float, bool]]:
     """
     Compare le texte OCR avec toutes les immatriculations en DB.
-    Retourne l'immatriculation la plus proche si ratio >= FUZZY_MATCH_RATIO.
-    Si aucun match n'est trouvé et que le texte est valide, enregistre le nouveau camion en DB.
+    Retourne un tuple: (plaque_retenue, similarite, est_ambigu)
+    - Rejette les correspondances si ratio < FUZZY_MATCH_RATIO (0.85)
+    - Détecte l'ambiguïté si 2 camions ont une similarité très proche (écart < AMBIGUITY_MARGIN)
     """
     norm = _normalize_plate(ocr_text)
     if not norm or len(norm) < 4:
         return None
 
-    # Validation du format selon le pays configuré (permissif en cas d'OCR partielle)
+    # Validation du format selon le pays configuré
     if not _validate_plate_format(norm):
-        print(f"[CV-OCR] Format non standard pour pays='{settings.plate_country}': '{norm}' — traitement continué")
+        print(f"[CV-OCR] Format non standard pour pays='{settings.plate_country}': '{norm}'")
 
     trucks = db.query(Truck).all()
-    best_ratio = 0.0
-    best_plate = None
+    if not trucks:
+        return (norm, 1.0, False)
+
+    scored = []
     for truck in trucks:
         ratio = _similarity(norm, truck.immatriculation)
-        if ratio > best_ratio:
-            best_ratio = ratio
-            best_plate = truck.immatriculation
+        scored.append((ratio, truck.immatriculation))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    best_ratio, best_plate = scored[0]
+
+    # Vérification d'ambiguïté (ex: 2 plaques presque identiques)
+    is_ambiguous = False
+    if len(scored) > 1:
+        second_ratio, second_plate = scored[1]
+        if (best_ratio - second_ratio) < AMBIGUITY_MARGIN and best_ratio >= FUZZY_MATCH_RATIO:
+            is_ambiguous = True
+            print(f"[CV-OCR] ⚠️ Ambiguité détectée : 1er={best_plate}({best_ratio:.2f}) vs 2e={second_plate}({second_ratio:.2f})")
 
     if best_ratio >= FUZZY_MATCH_RATIO and best_plate:
-        return best_plate
+        return (best_plate, best_ratio, is_ambiguous)
 
     # Camion inconnu mais texte OCR valide -> Création automatique en DB
     try:
@@ -151,11 +165,11 @@ def _match_plate_in_db(ocr_text: str, db) -> Optional[str]:
         db.add(new_truck)
         db.commit()
         db.refresh(new_truck)
-        print(f"[CV-OCR] 🆕 NOUVEAU CAMION ENREGISTRÉ EN DB : {norm}")
-        return norm
+        print(f"[CV-OCR] 🆕 Nouveau camion enregistré en DB : {norm}")
+        return (norm, 1.0, False)
     except Exception:
         db.rollback()
-        return norm
+        return (norm, 1.0, False)
 
 
 def _save_frame(frame, poste: PosteType, plaque: str) -> Optional[str]:
@@ -326,11 +340,12 @@ class CVService:
                     print(f"[CV-OCR] Confiance trop faible ({ocr_conf:.2f} < {OCR_CONFIDENCE_MIN}), ignoré")
                     continue
 
-                # ── Fuzzy match DB ───────────────────────────────────────────
-                matched_plate = _match_plate_in_db(ocr_text, db)
-                if not matched_plate:
-                    print(f"[CV-OCR] Aucune plaque en DB correspondant à '{ocr_text}' (ratio < {FUZZY_MATCH_RATIO})")
+                # ── Fuzzy match DB durci ─────────────────────────────────────
+                match_res = _match_plate_in_db(ocr_text, db)
+                if not match_res:
+                    print(f"[CV-OCR] Aucune plaque en DB correspondant à '{ocr_text}'")
                     continue
+                matched_plate, match_score, is_ambiguous = match_res
 
                 # ── Debounce anti-doublon ─────────────────────────────────────
                 key = (poste, matched_plate)
@@ -341,9 +356,7 @@ class CVService:
                     continue
                 self._debounce[key] = now
 
-                # ── Déduction type_event depuis le poste ─────────────────────
-                # La logique : 2 caméras par poste (entrée + sortie) identifiées
-                # par la camera_url. Ici, on infère via l'état du dernier cycle.
+                # ── Déduction type_event avec automate d'états ───────────────
                 type_event = self._infer_event_type(matched_plate, poste, db)
 
                 # ── Sauvegarde frame annoté ───────────────────────────────────
@@ -353,6 +366,9 @@ class CVService:
                             (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
                 image_path = _save_frame(annotated, poste, matched_plate)
 
+                # Si ambiguïté détectée, réduire artificiellement la confiance pour forcer la confirmation humaine
+                adjusted_conf = round(ocr_conf * (0.60 if is_ambiguous else 1.0), 3)
+
                 # ── Ingestion en DB ───────────────────────────────────────────
                 try:
                     service = EventIngestionService(db)
@@ -361,18 +377,19 @@ class CVService:
                         poste=poste,
                         type_event=type_event,
                         source="camera",
-                        confiance_ocr=round(ocr_conf, 3),
+                        confiance_ocr=adjusted_conf,
                         image_path=image_path,
                     )
-                    print(f"[CV] ✅ Event créé — {matched_plate} | {poste.value} | {type_event} | conf={ocr_conf:.2f}")
+                    print(f"[CV] ✅ Event créé — {matched_plate} | {poste.value} | {type_event} | conf={adjusted_conf}")
                     best_result = {
                         "plaque": matched_plate,
                         "poste": poste.value,
                         "type_event": type_event,
-                        "confiance_ocr": round(ocr_conf, 3),
+                        "confiance_ocr": adjusted_conf,
                         "confiance_yolo": round(conf, 3),
                         "image_path": image_path,
                         "event_id": event.id,
+                        "est_ambigu": is_ambiguous,
                     }
                 except Exception as e:
                     print(f"[CV] Erreur ingestion {matched_plate}: {e}")
@@ -381,24 +398,34 @@ class CVService:
 
     def _infer_event_type(self, plaque: str, poste: PosteType, db) -> str:
         """
-        Déduction du type d'événement (entrée/sortie) depuis l'état en DB :
-        - Si le camion n'a pas d'entrée au poste dans le cycle en cours → "entree"
-        - Sinon → "sortie"
-        Pour la PORTE_USINE : si pas de cycle EN_COURS → "entree", sinon → "sortie"
+        Automate d'États Fini & Validation de Cohérence Physique :
+        1. À la PORTE_USINE :
+           - Pas de cycle EN_COURS -> "entree"
+           - Cycle EN_COURS existant avec entrée > 5 min -> "sortie"
+        2. Postes intermédiaires (Parking, Bascule, Ensachage) :
+           - Pas d'entrée enregistrée -> "entree"
+           - Entrée existante récente (< MIN_DWELL_TIME_SECONDS) -> Rejet ou "entree"
+           - Entrée existante avec séjour légitime -> "sortie"
         """
         from app.models import TruckStatus
         truck = db.query(Truck).filter(Truck.immatriculation == plaque).first()
         if not truck:
             return "entree"
 
+        now = datetime.utcnow()
+
         if poste == PosteType.PORTE_USINE:
             cycle = db.query(Cycle).filter(
                 Cycle.truck_id == truck.id,
                 Cycle.status   == TruckStatus.EN_COURS
             ).first()
-            return "sortie" if cycle else "entree"
+            if not cycle:
+                return "entree"
+            # Si le camion vient juste d'entrer (< 2 min), ce n'est pas déjà une sortie usine
+            dwell_porte = (now - cycle.entree_porte).total_seconds()
+            return "sortie" if dwell_porte >= 120 else "entree"
 
-        # Pour les postes intermédiaires : cherche l'entrée sans sortie dans le cycle courant
+        # Pour les postes intermédiaires
         cycle = db.query(Cycle).filter(
             Cycle.truck_id == truck.id,
             Cycle.status   == TruckStatus.EN_COURS
@@ -412,9 +439,17 @@ class CVService:
             Event.poste      == poste,
             Event.type_event == "entree",
             Event.horodatage >= cycle.entree_porte,
-        ).first()
+        ).order_by(Event.horodatage.desc()).first()
 
-        return "sortie" if entree_event else "entree"
+        if not entree_event:
+            return "entree"
+
+        # Si l'entrée date de moins de MIN_DWELL_TIME_SECONDS, éviter un faux flip
+        dwell = (now - entree_event.horodatage).total_seconds()
+        if dwell < MIN_DWELL_TIME_SECONDS:
+            return "entree"
+
+        return "sortie"
 
     def capture_from_url(self, camera_url: str) -> Optional[object]:
         """
