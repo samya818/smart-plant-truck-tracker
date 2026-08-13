@@ -1,132 +1,59 @@
 """
-Pipeline d'entraînement automatique et d'évaluation prédictive des temps de cycle.
+Pipeline de Machine Learning Automatique & MLOps Industriel.
 
-Formulation Mathématique du Problème :
-  Soit un camion entrant à l'instant t_in (porte d'usine).
-  Variable Cible : y_t = durée totale du cycle en minutes (t_out - t_in).
-  Objectif       : Minimiser l'erreur de prédiction |y_t - \hat{y}_t|.
-
-Architecture MLOps & Anti-Leakage :
-  1. Séparation Temporelle Stricte (Out-Of-Time Validation) :
-     Les données sont triées chronologiquement. Train = [0, T_split], Test = [T_split, T_fin].
-     Aucun mélange aléatoire (No Shuffle) pour préserver la structure causale.
-  2. Prévention du Data Leakage :
-     Toutes les features temporelles (rolling means, std, lags) sont décalées d'au moins
-     1 pas de temps (shift >= 1) pour ne jamais inclure l'observation courante ou future.
-  3. Métriques d'Évaluation Complètes :
-     - MAE  (Mean Absolute Error en minutes)
-     - RMSE (Root Mean Squared Error en minutes)
-     - MAPE (Mean Absolute Percentage Error en %)
+Règles de validation & Rigueur scientifique :
+1. Variable Cible Formelle : y_t = duree_totale_cycle_minutes (t_out - t_in).
+2. Anti-Leakage Strict : Aucune feature ne regarde dans le futur (shift(1)).
+3. Médiane d'imputation calculée EXCLUSIVEMENT sur le train set.
+4. 3-Way Temporal Split : 70% Train (Passé) / 15% Validation (Early Stopping) / 15% Test (Futur Indépendant).
+5. Champion vs Challenger : Remplacement en production uniquement si MAE_test s'améliore (Zéro Régression).
+6. Multi-Métriques : MAE, RMSE, MAPE comparées à la baseline naïve (Moyenne Train).
 """
-import asyncio
 import os
 import pickle
 import json
-from datetime import datetime, timedelta
-from typing import Dict, Any, Tuple
 import numpy as np
 import pandas as pd
+from datetime import datetime
+from typing import Dict, Any
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from app.database import SessionLocal
-from app.models import Cycle, TruckStatus, Event
-
+from app.models import Cycle, TruckStatus
+from app.services.feature_engineering import build_features_matrix_train, FEATURE_COLUMNS
 
 def calculate_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Calcule le Mean Absolute Percentage Error (MAPE) en pourcentage."""
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-    # Éviter la division par zéro en filtrant les cycles non nuls
+    """Mean Absolute Percentage Error avec protection division par zéro."""
     mask = y_true > 0
     if not np.any(mask):
         return 0.0
     return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100.0)
 
-
 class AutoTrainPipeline:
-    """Pipeline MLOps avec validation temporelle stricte et anti-leakage."""
-
-    MODELS_DIR = "models"
-    METRICS_FILE = "models/training_metrics.json"
+    """Gestionnaire MLOps de réentraînement automatique."""
 
     def __init__(self):
-        os.makedirs(self.MODELS_DIR, exist_ok=True)
-
-    async def schedule_loop(self):
-        """Boucle infinie : entraînement et réévaluation toutes les 6 heures."""
-        while True:
-            await asyncio.sleep(6 * 3600)
-            try:
-                self.run_training_pipeline()
-            except Exception as e:
-                print(f"[AutoTrain] Erreur boucle planifiée : {e}")
-
-    def _build_features_anti_leakage(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Feature engineering causale sans fuite de données (Strictly Causal / Anti-Leakage).
-        Toutes les variables rétroactives utilisent shift(1) pour ne regarder que le passé.
-        """
-        df = df.copy().sort_values('ds').reset_index(drop=True)
-        
-        # 1. Variables calendaires et cycliques (connues au moment de l'entrée t_in)
-        df['hour_sin'] = np.sin(2 * np.pi * df['heure'] / 24.0)
-        df['hour_cos'] = np.cos(2 * np.pi * df['heure'] / 24.0)
-        df['dow_sin'] = np.sin(2 * np.pi * df['jour_semaine'] / 7.0)
-        df['dow_cos'] = np.cos(2 * np.pi * df['jour_semaine'] / 7.0)
-        df['is_weekend'] = (df['jour_semaine'] >= 5).astype(int)
-        df['is_morning_rush'] = ((df['heure'] >= 7) & (df['heure'] <= 9)).astype(int)
-        df['is_afternoon_rush'] = ((df['heure'] >= 14) & (df['heure'] <= 16)).astype(int)
-        
-        # 2. Variables d'autocorrélation causales (Strictly Past-Only)
-        # shift(1) garantit qu'on ne regarde que les cycles terminés AVANT l'entrée courante
-        df['lag_1_cycle'] = df['y'].shift(1)
-        df['lag_5_cycles'] = df['y'].shift(5)
-        df['rolling_mean_5'] = df['y'].shift(1).rolling(window=5, min_periods=1).mean()
-        df['rolling_std_5'] = df['y'].shift(1).rolling(window=5, min_periods=1).std().fillna(0)
-        
-        # Imputation causale (remplissage par la médiane globale historique)
-        median_y = df['y'].median() if len(df) > 0 else 60.0
-        df['lag_1_cycle'] = df['lag_1_cycle'].fillna(median_y)
-        df['lag_5_cycles'] = df['lag_5_cycles'].fillna(median_y)
-        df['rolling_mean_5'] = df['rolling_mean_5'].fillna(median_y)
-        df['rolling_std_5'] = df['rolling_std_5'].fillna(0.0)
-        
-        return df
+        self.MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models"))
+        os.makedirs(self.MODEL_DIR, exist_ok=True)
+        self.METRICS_FILE = os.path.join(self.MODEL_DIR, "training_metrics.json")
 
     def run_training_pipeline(self) -> Dict[str, Any]:
-        """Exécute l'entraînement et calcule MAE, RMSE et MAPE avec split chronologique."""
-        print(f"[AutoTrain] Démarrage de l'évaluation MLOps — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
+        """Exécute le pipeline complet avec 3-way temporal split et anti-leakage."""
+        db = SessionLocal()
         try:
-            db = SessionLocal()
-        except Exception as e:
-            print(f"[AutoTrain] Erreur connexion DB: {e}")
-            return {"status": "db_error", "reason": str(e)}
+            print("[AutoTrain] Démarrage du pipeline d'entraînement temporel...")
 
-        try:
-            depuis = datetime.utcnow() - timedelta(days=90)
-            from sqlalchemy import and_
-            from app.models import PosteType
+            # Récupérer les IDs des cycles simulés pour les exclure si nécessaire
+            cycles_simules_ids = [
+                row[0] for row in db.query(Cycle.id).filter(
+                    Cycle.truck_id.in_([1, 2, 3, 4, 5, 6])
+                ).all()
+            ]
 
-            # Identification et exclusion des données de tests purs
-            cycles_simules_ids = (
-                db.query(Cycle.id)
-                .join(
-                    Event,
-                    and_(
-                        Event.truck_id == Cycle.truck_id,
-                        Event.poste == PosteType.PORTE_USINE,
-                        Event.type_event == "entree",
-                        Event.horodatage >= Cycle.entree_porte,
-                        Event.source == "simulation_test_court",
-                    )
-                )
-                .subquery()
-            )
-
+            # Extraction des cycles réels complets et non anormaux
             cycles_bruts = db.query(Cycle).filter(
-                Cycle.entree_porte >= depuis,
                 Cycle.status == TruckStatus.TERMINE,
+                Cycle.duree_total.isnot(None),
                 Cycle.duree_total >= 10,              # Filtre qualité : durée minimale réaliste (10 min)
                 Cycle.est_anomalie == False,          # Exclut les pannes exceptionnelles
                 ~Cycle.id.in_(cycles_simules_ids),
@@ -141,16 +68,29 @@ class AutoTrainPipeline:
 
             # Construction du DataFrame trié chronologiquement
             df = pd.DataFrame([{
+                'entree_porte': c.entree_porte,
                 'ds': c.entree_porte,
                 'y': float(c.duree_total),
-                'heure': c.entree_porte.hour,
-                'jour_semaine': c.entree_porte.weekday(),
             } for c in cycles_bruts]).sort_values('ds').reset_index(drop=True)
 
-            # Split temporel strict 80% Train (Passé) / 20% Test (Futur)
-            split_idx = int(len(df) * 0.8)
-            train_df = df.iloc[:split_idx].copy()
-            test_df = df.iloc[split_idx:].copy()
+            # ── 3-WAY TEMPORAL SPLIT (70% Train / 15% Val / 15% Test) ────────
+            n_total = len(df)
+            idx_train = int(n_total * 0.70)
+            idx_val = int(n_total * 0.85)
+
+            train_df = df.iloc[:idx_train].copy()
+            val_df = df.iloc[idx_train:idx_val].copy()
+            test_df = df.iloc[idx_val:].copy()
+
+            # Anti-Leakage Absolu : Calcul de la médiane UNIQUEMENT sur le set Train
+            train_median_y = float(train_df['y'].median()) if not train_df.empty else 90.0
+
+            # Construction des matrices de features via le module centralisé
+            df_feat, _ = build_features_matrix_train(df, train_median_y=train_median_y)
+
+            train_feat = df_feat.iloc[:idx_train]
+            val_feat = df_feat.iloc[idx_train:idx_val]
+            test_feat = df_feat.iloc[idx_val:]
 
             models_metrics: Dict[str, Dict[str, float]] = {}
             candidats = {}
@@ -163,7 +103,9 @@ class AutoTrainPipeline:
             try:
                 from prophet import Prophet
                 m_prophet = Prophet(daily_seasonality=True, weekly_seasonality=True, yearly_seasonality=False)
-                m_prophet.fit(train_df[['ds', 'y']])
+                # Entraînement sur train + validation pour maximiser l'historique
+                train_val_df = pd.concat([train_df, val_df])
+                m_prophet.fit(train_val_df[['ds', 'y']])
                 
                 future = test_df[['ds']].copy()
                 forecast = m_prophet.predict(future)
@@ -184,18 +126,13 @@ class AutoTrainPipeline:
                 print(f"[AutoTrain] Prophet non disponible : {e}")
 
             # ──────────────────────────────────────────────────────────────────
-            # 2. Modèle XGBoost (Gradient Boosting avec Features Causales)
+            # 2. Modèle XGBoost (Gradient Boosting avec Early Stopping sur Val)
             # ──────────────────────────────────────────────────────────────────
             try:
                 import xgboost as xgb
-                df_feat = self._build_features_anti_leakage(df)
-                feature_cols = [c for c in df_feat.columns if c not in ['ds', 'y']]
-
-                train_feat = df_feat.iloc[:split_idx]
-                test_feat = df_feat.iloc[split_idx:]
-
-                dtrain = xgb.DMatrix(train_feat[feature_cols], label=train_feat['y'])
-                dtest = xgb.DMatrix(test_feat[feature_cols], label=test_feat['y'])
+                dtrain = xgb.DMatrix(train_feat[FEATURE_COLUMNS], label=train_feat['y'])
+                dval = xgb.DMatrix(val_feat[FEATURE_COLUMNS], label=val_feat['y'])
+                dtest = xgb.DMatrix(test_feat[FEATURE_COLUMNS], label=test_feat['y'])
 
                 params = {
                     'objective': 'reg:squarederror',
@@ -206,9 +143,10 @@ class AutoTrainPipeline:
                     'eval_metric': 'mae',
                     'seed': 42
                 }
+                # Early stopping sur le set de VALIDATION (le TEST set reste 100% aveugle)
                 m_xgb = xgb.train(
-                    params, dtrain, num_boost_round=150,
-                    evals=[(dtest, 'test')], early_stopping_rounds=20,
+                    params, dtrain, num_boost_round=200,
+                    evals=[(dval, 'val')], early_stopping_rounds=15,
                     verbose_eval=False
                 )
                 y_pred_xgb = m_xgb.predict(dtest)
@@ -228,14 +166,14 @@ class AutoTrainPipeline:
                 print(f"[AutoTrain] XGBoost non disponible : {e}")
 
             # ──────────────────────────────────────────────────────────────────
-            # 3. Modèle Baseline Naïf (Moyenne Mobile Historique EWMA)
+            # 3. Modèle Baseline Naïf (Moyenne Historique du Train Set)
             # ──────────────────────────────────────────────────────────────────
-            mean_baseline = train_df['y'].mean()
+            mean_baseline = float(train_df['y'].mean())
             y_pred_base = np.full_like(y_test, fill_value=mean_baseline)
             mae_b = float(mean_absolute_error(y_test, y_pred_base))
             rmse_b = float(np.sqrt(mean_squared_error(y_test, y_pred_base)))
             mape_b = float(calculate_mape(y_test, y_pred_base))
-            models_metrics['baseline_ewma'] = {
+            models_metrics['baseline_mean'] = {
                 "mae": round(mae_b, 2),
                 "rmse": round(rmse_b, 2),
                 "mape": round(mape_b, 2),
@@ -244,7 +182,7 @@ class AutoTrainPipeline:
             if not models_metrics:
                 return {"status": "failed", "raison": "Aucun modèle n'a pu être évalué"}
 
-            # Sauvegarde des modèles
+            # Sauvegarde conditionnelle des modèles (Champion vs Challenger)
             if 'prophet' in candidats:
                 self._save_model('prophet_champion.pkl', candidats['prophet'], models_metrics['prophet']['mae'], len(df))
             if 'xgboost' in candidats:
@@ -254,10 +192,12 @@ class AutoTrainPipeline:
             result_payload = {
                 "date_evaluation": datetime.now().isoformat(),
                 "target_variable": "duree_totale_cycle_minutes (y_t = t_out - t_in)",
-                "validation_method": "Temporal Split (80% Train chronologique / 20% Test futur)",
+                "validation_method": "3-Way Temporal Split (70% Train / 15% Val Early Stopping / 15% Test Indépendant)",
                 "anti_leakage_applied": True,
+                "train_median_imputed": round(train_median_y, 2),
                 "n_samples_total": len(df),
                 "n_train": len(train_df),
+                "n_val": len(val_df),
                 "n_test": len(test_df),
                 "metrics": models_metrics,
             }

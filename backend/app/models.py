@@ -114,10 +114,12 @@ class Event(Base):
     cause_retard_libre = Column(Text, nullable=True)
     minutes_retard = Column(Integer, nullable=True)
 
-    # --- Métadonnées CV ---
+    # --- Métadonnées CV & Audit FSM ---
     confiance_detection = Column(Float, nullable=True)
     confiance_ocr = Column(Float, nullable=True)
     necesita_confirmacion = Column(Boolean, default=False)
+    is_inferred = Column(Boolean, default=False)          # True si événement créé par inférence/réparation
+    has_fsm_anomaly = Column(Boolean, default=False)      # True si transition FSM inhabituelle
     image_path = Column(String(255), nullable=True)
 
     # --- Géolocalisation (si agent mobile) ---
@@ -145,6 +147,7 @@ class Cycle(Base):
     duree_total = Column(Float, default=0.0)
     status = Column(Enum(TruckStatus), default=TruckStatus.EN_COURS)
     est_anomalie    = Column(Boolean, default=False)
+    has_fsm_anomaly = Column(Boolean, default=False)
     auto_closed     = Column(Boolean, default=False)   # fermé automatiquement par le système
     gap_applique    = Column(Float,   nullable=True)    # gap route appliqué (minutes)
     truck = relationship("Truck", back_populates="cycles")

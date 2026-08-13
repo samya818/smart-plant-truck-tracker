@@ -162,6 +162,7 @@ class EventIngestionService:
             image_path=image_path,
             confiance_ocr=confiance_ocr,
             necesita_confirmacion=necesita_confirmacion,
+            has_fsm_anomaly=not is_valid_transition,
             gps_lat=gps_lat,
             gps_lon=gps_lon,
             delay_cause_id=delay_cause_id,
@@ -173,6 +174,12 @@ class EventIngestionService:
         self.db.refresh(event)
 
         self._update_cycle(truck.id, poste, type_event, now)
+
+        if not is_valid_transition:
+            cycle = self.db.query(Cycle).filter(Cycle.truck_id == truck.id, Cycle.status == TruckStatus.EN_COURS).first()
+            if cycle:
+                cycle.has_fsm_anomaly = True
+                self.db.commit()
 
         if delay_cause_id:
             cause = self.db.query(DelayCause).get(delay_cause_id)
@@ -274,16 +281,24 @@ class EventIngestionService:
             return  # Entrée déjà présente → pas besoin d'inférer
 
         # Créer l'entrée inférée 1 minute avant la sortie déclarée
+        inferred_time = sortie_time - timedelta(minutes=1)
         inferred_entry = Event(
             truck_id=truck_id,
             poste=poste,
             type_event="entree",
-            horodatage=sortie_time - timedelta(minutes=1),
-            source="inferred",
-            agent_id="SYSTEM_INFERRED",
+            horodatage=inferred_time,
+            received_at=datetime.utcnow(),
+            source=f"inferred_{source}",
+            is_inferred=True,
+            has_fsm_anomaly=True,
+            cause_retard_libre="Entrée inférée automatiquement (capteur manquant)",
         )
         self.db.add(inferred_entry)
         self.db.commit()
+        
+        cycle.est_anomalie = True
+        self.db.commit()
+        print(f"[Ingestion] ⚙️ Entrée inférée créée (is_inferred=True) : truck_id={truck_id} @ {poste.value} à {inferred_time.strftime('%H:%M:%S')}")
 
     # ════════════════════════════════════════════════════════════════════════
     # MÉCANISME 4 — WATCHDOG : marquer EXPIRE les cycles trop vieux

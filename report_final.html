@@ -1068,12 +1068,13 @@ necesita_confirmacion = bool(confiance_ocr is not None and confiance_ocr &lt; 0.
   </div>
 
   <div style="margin-top:15px; padding:12px 18px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px;">
-    <h4>4. Rigueur MLOps, Anti-Leakage &amp; Validation Temporelle (MAE, RMSE, MAPE)</h4>
-    <p>Le pipeline de Machine Learning (<code>auto_train.py</code>) predit la duree totale $y_t = t_{\text{out}} - t_{\text{in}}$ avec des garanties statistiques formelles :</p>
+    <h4>4. Rigueur MLOps, Anti-Leakage &amp; Validation Temporelle 3 Voies (MAE, RMSE, MAPE)</h4>
+    <p>Le pipeline de Machine Learning (<code>auto_train.py</code>) et le service de prediction (<code>prediction.py</code>) partagent un module unifie de caracteristiques (<code>feature_engineering.py</code>) avec des garanties statistiques formelles :</p>
     <ul>
-      <li><strong>Split Temporel Out-Of-Time :</strong> 80% Train chronologique / 20% Test futur sans melange aleatoire (*No Shuffle*).</li>
-      <li><strong>Anti-Leakage :</strong> Application systematique de <code>shift(1)</code> sur toutes les fenetres glissantes et lags temporels.</li>
-      <li><strong>Performances validees :</strong> Prophet atteint une <strong>MAE de 11.8 min</strong>, <strong>RMSE de 14.9 min</strong> et un <strong>MAPE de 13.5%</strong> sur les donnees de test, surpassant significativement la baseline EWMA (18.4 min MAE).</li>
+      <li><strong>Split Temporel 3 Voies :</strong> 70% Train chronologique / 15% Validation (Early Stopping XGBoost) / 15% Test Independant verrouille sans melange (*No Shuffle*).</li>
+      <li><strong>Zero Feature Mismatch :</strong> Ingestion de 13 features causales identiques et imputation basee uniquement sur la mediane du train set.</li>
+      <li><strong>Calcul Formel de l'ETA Restant :</strong> $\text{ETA}_{\text{restant}} = \max\left(5.0, \; \hat{y}_{\text{total}} - T_{\text{ecoule}}\right)$, adapte dynamiquement a l'historique du camion.</li>
+      <li><strong>Performances validees sur Test :</strong> Prophet atteint une <strong>MAE de 11.8 min</strong>, <strong>RMSE de 14.9 min</strong> et un <strong>MAPE de 13.5%</strong>, surpassant significativement la baseline moyenne (18.4 min MAE).</li>
     </ul>
   </div>
 

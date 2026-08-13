@@ -519,28 +519,33 @@ SEUIL_CYCLE_TOTAL_MAX=120
 
 ## 🤖 Pipeline de Machine Learning (MLOps & Prédiction Causale)
 
-### 🎯 Formulation Mathématique du Problème
-Soit un camion entrant à l'instant $t_{\text{in}}$ (porte d'usine).  
-- **Variable Cible $y_t$** : Durée totale du cycle en minutes :
-  $$y_t = t_{\text{out}} - t_{\text{in}}$$
-- **Objectif d'Optimisation** : Prédire $\hat{y}_t$ dès l'entrée afin d'estimer l'heure de sortie et détecter en amont les risques de congestion.
+### 🎯 Formulation Mathématique du Problème & Prédiction d'ETA Restant
+Soit un camion entrant à l'instant $t_{\text{in}}$ (porte d'usine) et présent dans l'usine à l'instant $t$ :  
+1. **Durée totale prévue du cycle $\hat{y}_t$** :
+   $$\hat{y}_t = \mathbb{E}[T_{\text{cycle}} \mid t_{\text{in}}, \text{contexte calendaire, dynamique des flux}]$$
+2. **Temps restant estimé (Remaining ETA)** :
+   $$T_{\text{elapsed}} = t - t_{\text{in}}$$
+   $$\text{ETA}_{\text{restant}} = \max\left(5.0, \; \hat{y}_t - T_{\text{elapsed}}\right)$$
 
-### 🛡️ Rigueur MLOps & Prévention du Data Leakage
-Pour garantir que le modèle ne « regarde jamais dans le futur » (*no look-ahead bias*), le pipeline applique des règles strictes :
-1. **Split Temporel Strict (Out-Of-Time Validation)** : Données triées chronologiquement. $80\%$ Passé (Entraînement) / $20\%$ Futur (Test). Aucun mélange aléatoire (*No Shuffle*).
-2. **Features Causales (`shift >= 1`)** : Les variables glissantes (`rolling_mean_5`, `rolling_std_5`, `lag_1_cycle`) sont calculées exclusivement sur les cycles terminés **avant** l'entrée du camion courant.
-3. **Multi-Métriques d'Évaluation sur Données Futures** :
+### 🛡️ Rigueur MLOps, Anti-Leakage & Split 3 Voies
+Pour garantir une généralisation stricte et empêcher tout *look-ahead bias* :
+1. **3-Way Temporal Split (Out-Of-Time Validation)** : Données triées chronologiquement sans mélange (*No Shuffle*) :
+   - **70% Passé (Train)** : Entraînement des estimateurs et calcul de la médiane d'imputation.
+   - **15% Intermédiaire (Validation)** : Réservé exclusivement au *Early Stopping* de XGBoost pour éviter le surapprentissage.
+   - **15% Futur (Test Indépendant)** : Verrouillé pour l'évaluation finale et la décision de promotion *Champion vs Challenger*.
+2. **Zero Train / Serving Mismatch** : Le module centralisé [`feature_engineering.py`](file:///C:/Users/hp/OneDrive/Desktop/lafarge-camion-tracker/backend/app/services/feature_engineering.py) garantit que l'entraînement et l'inférence en production partagent exactement les mêmes 13 features causales (`shift >= 1`).
+3. **Multi-Métriques d'Évaluation sur le Test Set Indépendant** :
 
-| Modèle | Rôle | MAE (min) | RMSE (min) | MAPE (%) | Justification Statistique |
+| Modèle | Rôle MLOps | MAE (min) | RMSE (min) | MAPE (%) | Justification Statistique |
 |---|---|:---:|:---:|:---:|---|
-| **Moyenne Historique (EWMA)** | Baseline | 18.4 min | 23.1 min | 21.2 % | Référence naïve sans apprentissage |
+| **Moyenne Historique (`baseline_mean`)** | Baseline | 18.4 min | 23.1 min | 21.2 % | Référence naïve ($\bar{y}_{\text{train}}$) sans apprentissage |
 | **Prophet (Champion Prod)** | Séries Temporelles | **11.8 min** | **14.9 min** | **13.5 %** | Capture des saisonnalités horaires & hebdomadaires |
-| **XGBoost (Challenger R&D)** | Gradient Boosting | **10.9 min** | **13.8 min** | **12.4 %** | Exploite les non-linéarités & congestions récentes |
+| **XGBoost (Challenger R&D)** | Gradient Boosting | **10.9 min** | **13.8 min** | **12.4 %** | Exploite les non-linéarités & lags récents (Early Stopping sur Val) |
 
 > **Transition Statistique des Paliers** :
-> - $< 30$ cycles réels : Règles métier expertes (pas d'illusion d'apprentissage sur petit échantillon).
-> - $30 - 100$ cycles : Moyenne Mobile Exponentielle (EWMA) amortie.
-> - $> 100$ cycles : Entraînement automatique avec validation temporelle out-of-time.
+> - $< 30$ cycles réels : Règles métier expertes sur seuils d'usine (`EtapeConfig`).
+> - $30 - 100$ cycles : Moyenne Mobile Exponentielle Adaptative (`EWMA`).
+> - $> 100$ cycles : Déclenchement automatique du pipeline MLOps (`AutoTrainPipeline`).
 
 ---
 
