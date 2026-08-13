@@ -107,9 +107,9 @@ def get_stats(db: Session = Depends(get_db)):
     ).scalar() or 0
 
     # ── Aujourd'hui ───────────────────────────────────────────────────────────
-    # Nombre de trucks DISTINCTS ayant eu au moins un événement aujourd'hui
-    camions_aujourdhui = db.query(func.count(distinct(Event.truck_id))).filter(
-        Event.horodatage >= today_utc
+    # Nombre total de cycles / passages camions démarrés aujourd'hui (En cours + Terminés)
+    camions_aujourdhui = db.query(func.count(Cycle.id)).filter(
+        Cycle.entree_porte >= today_utc
     ).scalar() or 0
 
     # ── Temps moyen cycle ─────────────────────────────────────────────────────
