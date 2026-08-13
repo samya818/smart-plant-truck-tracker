@@ -17,7 +17,7 @@
 
 ## 🎓 Contexte du Projet
 
-Ce projet a été réalisé dans le cadre d'un **stage d'initiation chez LafargeHolcim Meknès**, leader mondial des matériaux de construction. L'objectif était de concevoir et développer une solution complète de traçabilité des flux camions dans l'usine de cimenterie, en combinant **vision par ordinateur (OCR)**, **interface mobile terrain** et **analytique temps réel**.
+Ce projet a été réalisé dans le cadre d'un **stage de fin d'année chez LafargeHolcim Meknès** (1ère année cycle ingénieur en Intelligence Artificielle et Sciences de Données pour les Systèmes Industriels — IAD-SI, 3ème année ENSAM Meknès). L'objectif était de concevoir et développer une solution complète de traçabilité des flux camions dans l'usine de cimenterie, en combinant **vision par ordinateur (OCR)**, **interface mobile terrain** et **analytique temps réel**.
 
 ---
 
@@ -762,10 +762,10 @@ cd frontend && npm test
 ---
 
 ## 👤 Auteur
-
-**Samya** — IoT Industriel & Traçabilité Logistique
-📍 Stage d'initiation — LafargeHolcim Meknès, Maroc
-🔗 [github.com/samya818](https://github.com/samya818)
+ 
+ **Samya Loukili** — Élève Ingénieure en Intelligence Artificielle & Sciences de Données (IAD-SI)  
+ 📍 Stage de fin d'année (1ère année cycle ingénieur / 3ème année ENSAM Meknès) — LafargeHolcim Meknès, Maroc  
+ 🔗 [github.com/samya818](https://github.com/samya818)
 
 ---
 
