@@ -40,15 +40,13 @@ if (-not $IP) {
 Write-Host "✅ IP détectée : $IP" -ForegroundColor Green
 Write-Host ""
 
-# 3. Désactiver la simulation
-Write-Host "🔧 Configuration du mode production..." -ForegroundColor Yellow
-$configPath = "backend/app/config.py"
-if (Test-Path $configPath) {
-    (Get-Content $configPath) -replace 'cv_mode: str = "simulation"', 'cv_mode: str = "real"' | Set-Content $configPath
-    Write-Host "✅ Simulation désactivée (mode = real)" -ForegroundColor Green
-} else {
-    Write-Host "⚠️ Fichier config.py non trouvé" -ForegroundColor Yellow
+# 3. Configurer le mode usine dans .env
+Write-Host "🔧 Configuration du mode production dans .env..." -ForegroundColor Yellow
+if (-not (Test-Path ".env")) {
+    Copy-Item ".env.example" ".env"
 }
+(Get-Content ".env") -replace 'CV_MODE=.*', 'CV_MODE=real' | Set-Content ".env"
+Write-Host "✅ Mode usine configuré (CV_MODE=real)" -ForegroundColor Green
 
 # 4. Créer le .env du frontend
 Write-Host "🔧 Configuration du frontend..." -ForegroundColor Yellow
