@@ -44,18 +44,58 @@ DEBOUNCE_SECONDS       = 30          # ne pas re-créer un event pour le même c
 # HELPERS OCR
 # ──────────────────────────────────────────────────────────────────────────────
 
+# ──────────────────────────────────────────────────────────────────────────────
+# FORMATS DE PLAQUES PAR PAYS (configurable via PLATE_COUNTRY dans .env)
+# ──────────────────────────────────────────────────────────────────────────────
+# maroc   : 12345-أ-1  (1-5 chiffres — lettre arabe — 1-2 chiffres)
+# algerie : 12345-123-16 (chiffres — chiffres — numéro wilaya 01-58)
+# tunisie : 123TUN4567 ou 123 TN 4567
+# france  : AA-123-AA   (lettre lettre — chiffres — lettre lettre)
+# generique: tout texte alphanumérique de 4+ caractères
+PLATE_PATTERNS: dict[str, list[str]] = {
+    "maroc":    [r"^\d{1,5}-[\u0600-\u06FF]-\d{1,2}$", r"^\d{1,5}-[A-Z]-\d{1,2}$"],
+    "algerie":  [r"^\d{4,6}-\d{1,4}-\d{2}$"],
+    "tunisie":  [r"^\d{1,4}[A-Z]{2}\d{3,5}$", r"^\d{1,4}TUN\d{3,5}$"],
+    "france":   [r"^[A-Z]{2}-\d{3}-[A-Z]{2}$"],
+    "generique": [r"^[A-Z0-9\-]{4,15}$"],
+}
+
+
 def _normalize_plate(text: str) -> str:
     """
     Normalise une chaîne pour comparaison :
-    - Supprime accents
+    - Conserve les lettres arabes telles quelles
+    - Supprime les accents latins
     - Majuscules
-    - Garde uniquement alphanumérique + tirets
+    - Garde uniquement alphanumérique + tirets + lettres arabes
     """
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(c for c in text if not unicodedata.combining(c))
-    text = text.upper()
-    text = re.sub(r"[^A-Z0-9\-]", "", text)
+    result = []
+    for c in text:
+        if '\u0600' <= c <= '\u06FF':
+            result.append(c)
+        else:
+            normalized = unicodedata.normalize("NFKD", c)
+            for nc in normalized:
+                if not unicodedata.combining(nc):
+                    result.append(nc.upper())
+    text = "".join(result)
+    text = re.sub(r"[^A-Z0-9\-\u0600-\u06FF]", "", text)
     return text
+
+
+def _validate_plate_format(plate: str) -> bool:
+    """
+    Valide que la plaque normalisée correspond au format du pays configuré.
+    Permissif : retourne True si aucun pattern ne correspond (pour gérer
+    les cas de poussiere/occlusion partielle de plaque).
+    """
+    country = settings.plate_country.lower().strip()
+    patterns = PLATE_PATTERNS.get(country, PLATE_PATTERNS["generique"])
+    norm = _normalize_plate(plate)
+    for pattern in patterns:
+        if re.match(pattern, norm):
+            return True
+    return len(norm) >= 4  # permissif en cas d'OCR partielle
 
 
 def _similarity(a: str, b: str) -> float:
@@ -88,6 +128,10 @@ def _match_plate_in_db(ocr_text: str, db) -> Optional[str]:
     norm = _normalize_plate(ocr_text)
     if not norm or len(norm) < 4:
         return None
+
+    # Validation du format selon le pays configuré (permissif en cas d'OCR partielle)
+    if not _validate_plate_format(norm):
+        print(f"[CV-OCR] Format non standard pour pays='{settings.plate_country}': '{norm}' — traitement continué")
 
     trucks = db.query(Truck).all()
     best_ratio = 0.0
@@ -197,9 +241,18 @@ class CVService:
         if self._ocr_reader is not None:
             return self._ocr_reader
         import easyocr
-        # Langues : arabe (pour plaques marocaines) + anglais
-        print("[CV] Chargement EasyOCR (ar + en)...")
-        self._ocr_reader = easyocr.Reader(["ar", "en"], gpu=False, verbose=False)
+        # Langues OCR selon le pays configuré
+        _country_langs: dict[str, list[str]] = {
+            "maroc":    ["ar", "en"],
+            "algerie":  ["ar", "fr"],
+            "tunisie":  ["ar", "fr"],
+            "france":   ["fr"],
+            "generique": ["ar", "en", "fr"],
+        }
+        country = settings.plate_country.lower()
+        langs = _country_langs.get(country, ["ar", "en"])
+        print(f"[CV] Chargement EasyOCR pour pays='{country}' → langues={langs}...")
+        self._ocr_reader = easyocr.Reader(langs, gpu=False, verbose=False)
         print("[CV] EasyOCR chargé ✓")
         return self._ocr_reader
 
@@ -547,15 +600,17 @@ class CVService:
 
     async def _simulate_truck(self, plaque: str):
         """Coroutine indépendante par camion simulé."""
-        # Décalage échelonné au démarrage : chaque camion attend son tour pour ne pas être tous EN_COURS simultanément
+        # Le multiplier est chargé en premier pour calibrer le délai initial
+        multiplier = max(1.0, float(settings.sim_speed_multiplier))
+
+        # Décalage échelonné au démarrage : ≈15-40 min réelles entre chaque camion
         truck_num = sum(ord(c) for c in plaque) % 35
-        initial_delay = truck_num * random.uniform(15, 40)
-        await asyncio.sleep(initial_delay)
+        initial_delay_min = truck_num * random.uniform(15, 40)  # minutes
+        initial_delay_sec = max(2.0, (initial_delay_min * 60.0) / multiplier)
+        await asyncio.sleep(initial_delay_sec)
 
         if plaque not in self.sim_state:
             self.sim_state[plaque] = {"index": 0}
-
-        multiplier = max(1.0, float(settings.sim_speed_multiplier))
 
         def _gen_delays_minutes():
             # Durées d'étape réalistes en minutes
@@ -659,5 +714,7 @@ class CVService:
                 self.sim_state[plaque]["index"] = (idx + 1) % len(self.postes_cycle)
                 # Quand le camion termine tout le cycle (sortie usine), faire une pause de repos
                 if idx == len(self.postes_cycle) - 1:
-                    rest_time = random.uniform(60, 180)
-                    await asyncio.sleep(rest_time)
+                    # Pause entre deux passages : 1-3h en temps réel, proportionnel au multiplicateur
+                    rest_time_min = random.uniform(60, 180)  # minutes
+                    rest_time_sec = max(5.0, (rest_time_min * 60.0) / multiplier)
+                    await asyncio.sleep(rest_time_sec)

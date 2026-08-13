@@ -4,6 +4,7 @@ import Dashboard from '@/pages/Dashboard';
 import MobilePage from '@/pages/MobilePage';
 import StatistiquesPage from '@/pages/StatistiquesPage';
 import ConfirmationPage from '@/pages/ConfirmationPage';
+import { OfflineBanner } from '@/components/OfflineBanner';
 import { LayoutDashboard, Smartphone, BarChart2, ShieldCheck } from 'lucide-react';
 
 const API_BASE = '';
@@ -39,6 +40,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-100 flex flex-col">
+        {/* ── Bandeau hors-ligne PWA ── */}
+        <OfflineBanner />
         {/* ── Barre de navigation principale ── */}
         <nav className="bg-white border-b border-gray-200 px-6 py-0 flex items-center shadow-sm sticky top-0 z-50">
 

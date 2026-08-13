@@ -37,7 +37,13 @@ class Settings(BaseSettings):
 
     simulation_days: int = 30
     simulation_trucks_per_day: int = 80
-    sim_speed_multiplier: float = 60.0  # 1 seconde simulée = 1 minute réelle
+    # Vitesse de simulation :
+    # 1.0   = temps réel (cycles de 60-120 min — pour démo production)
+    # 60.0  = accéléré (1 s réelle = 1 min simulée — cycles ~60s — pour dev rapide)
+    # 360.0 = ultra-rapide (cycles ~10 s — pour les tests automatisés)
+    sim_speed_multiplier: float = 1.0
+    # Format de plaque : "maroc" | "algerie" | "tunisie" | "france" | "generique"
+    plate_country: str = "maroc"
 
     seuil_attente_parking_max: int = 30
     seuil_bascule_max: int = 15
