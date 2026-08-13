@@ -547,18 +547,18 @@ class CVService:
 
     async def _simulate_truck(self, plaque: str):
         """Coroutine indépendante par camion simulé."""
-        await asyncio.sleep(random.uniform(0, 30))
+        # Décalage échelonné au démarrage : chaque camion attend son tour pour ne pas être tous EN_COURS simultanément
+        truck_num = sum(ord(c) for c in plaque) % 35
+        initial_delay = truck_num * random.uniform(15, 40)
+        await asyncio.sleep(initial_delay)
 
         if plaque not in self.sim_state:
             self.sim_state[plaque] = {"index": 0}
 
         multiplier = max(1.0, float(settings.sim_speed_multiplier))
 
-        # Horloge virtuelle par camion pour enregistrer de vraies durées en DB
-        sim_current_time = datetime.utcnow()
-
         def _gen_delays_minutes():
-            # Délais réalistes (en minutes réelles) pour chaque étape du cycle
+            # Durées d'étape réalistes en minutes
             return [
                 random.uniform(1, 3),    # 0. Porte entrée (1-3 min)
                 random.uniform(12, 35),  # 1. Parking attente (12-35 min)
@@ -589,7 +589,9 @@ class CVService:
             sleep_sec = max(1.0, (delay_min * 60.0) / multiplier)
 
             await asyncio.sleep(sleep_sec)
-            sim_current_time += timedelta(minutes=delay_min)
+
+            # Horodatage réel actuel
+            event_time = datetime.utcnow()
 
             if idx == len(self.postes_cycle) - 1:
                 step_delays_min = _gen_delays_minutes()
@@ -619,6 +621,18 @@ class CVService:
             db = SessionLocal()
             success = False
             try:
+                # Si c'est un événement de SORTIE d'étape, ajuster l'événement d'ENTRÉE de cette étape
+                # dans le passé (event_time - delay_min) pour que la durée enregistrée en DB soit exacte
+                if type_event == "sortie":
+                    last_entree = db.query(Event).join(Truck).filter(
+                        Truck.immatriculation == plaque,
+                        Event.poste == poste,
+                        Event.type_event == "entree"
+                    ).order_by(Event.horodatage.desc()).first()
+                    if last_entree and (event_time - last_entree.horodatage).total_seconds() < 60:
+                        last_entree.horodatage = event_time - timedelta(minutes=delay_min)
+                        db.commit()
+
                 service = EventIngestionService(db)
                 service.ingest_event(
                     plaque=plaque,
@@ -626,7 +640,7 @@ class CVService:
                     type_event=type_event,    # type: ignore
                     source=source_tag,
                     confiance_ocr=confiance,
-                    horodatage=sim_current_time,
+                    horodatage=event_time,
                 )
                 print(
                     f"[CV-Sim] {plaque} | {poste.value} | {type_event} "
@@ -634,9 +648,6 @@ class CVService:
                 )
                 success = True
             except Exception as e:
-                # L'index N'AVANCE PAS en cas d'échec :
-                # évite les cycles orphelins (entrée porte non créée →
-                # auto-close à 3 min qui pollue temps_moyen_cycle)
                 print(
                     f"[CV-Sim] ⚠️  Échec {plaque} @ {poste.value}/{type_event}: {e} "
                     f"(index conservé à {idx})"
@@ -644,6 +655,9 @@ class CVService:
             finally:
                 db.close()
 
-            # Avance seulement si l'ingestion a réussi
             if success:
                 self.sim_state[plaque]["index"] = (idx + 1) % len(self.postes_cycle)
+                # Quand le camion termine tout le cycle (sortie usine), faire une pause de repos
+                if idx == len(self.postes_cycle) - 1:
+                    rest_time = random.uniform(60, 180)
+                    await asyncio.sleep(rest_time)
