@@ -3,7 +3,8 @@
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?style=for-the-badge&logo=react)](https://react.dev)
-[![Tests](https://img.shields.io/badge/Pytest-35%2F35%20Passed%20(100%25)-success?style=for-the-badge&logo=pytest)](https://docs.pytest.org)
+[![Tests Backend](https://img.shields.io/badge/Pytest-35%2F35%20Passed%20(100%25)-success?style=for-the-badge&logo=pytest)](https://docs.pytest.org)
+[![Tests Frontend](https://img.shields.io/badge/Vitest-39%2F39%20Passed%20(100%25)-success?style=for-the-badge&logo=vitest)](https://vitest.dev)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791?style=for-the-badge&logo=postgresql)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Cache-Redis%207-DC382D?style=for-the-badge&logo=redis)](https://redis.io)
 [![Docker](https://img.shields.io/badge/Deploy-Ready--to--Deploy-2496ED?style=for-the-badge&logo=docker)](https://docker.com)
@@ -687,28 +688,41 @@ pillow==10.3.0              # Manipulation d'images
 
 ## 🧪 Suite de Tests Automatisés & Qualité (QA)
 
-Le projet intègre une suite de **tests automatisés multi-niveaux** avec `pytest`, garantissant la non-régression, la fiabilité de l'OCR et la conformité des règles métier.
+Le projet intègre une suite complète de **74 tests automatisés** (35 Backend `pytest` + 39 Frontend `Vitest`), garantissant la non-régression, la fiabilité de l'OCR, la conformité des règles métier et la stabilité des composants React.
 
 ```text
-======================== 32 passed in 4.32s ========================
+Backend  : ======================== 35 passed in 4.52s (100%) ========================
+Frontend : Test Files  4 passed (4) | Tests  39 passed (39) in 2.11s (100%)
 ```
 
-### 📚 Les 6 Niveaux de Tests Implémentés :
+### 📚 1. Tests Backend (`pytest` — 35 tests) :
 
 | Catégorie | Fichier Source | Description & Couverture |
 | :--- | :--- | :--- |
-| **🧪 1. Tests Unitaires** | `tests/test_ocr_helpers.py` | Normalisation des plaques marocaines, nettoyage des caractères parasites, algorithme de similarité de Levenshtein. |
-| **🔗 2. Tests d'Intégration API** | `tests/test_api_endpoints.py` | Validation des routes REST FastAPI (`/health`, `/api/dashboard/stats`, `/api/analytics/rapport`, `/api/events/active`, `/api/events/finished-today`). |
-| **🔄 3. Tests End-to-End (E2E)** | `tests/test_e2e_lifecycle.py` | Simulation du parcours complet d'un camion (`Entrée Porte` → `Parking` → `Bascule` → `Ensachage` → `Sortie`), calcul automatique des durées et clôture du cycle. |
-| **⚡ 4. Tests de Cache & Performance** | `tests/test_redis_cache.py` | Validation de la connexion Redis, écriture/lecture avec TTL, et invalidation automatique du cache lors de l'ingestion d'événements. |
-| **🚨 5. Tests Métier & Algorithmes** | `tests/test_anomaly_detector.py` | Algorithmes d'analyse d'`AnomalyDetector` : détection du poste bloquant et calcul précis des dépassements de seuils. |
-| **🛡️ 6. Tests de Sécurité & Cas Limites** | `tests/test_edge_cases_security.py` | Validation stricte des schémas Pydantic (HTTP 422), gestion des erreurs 404, robustesse face aux entrées corrompues et en-têtes CORS. |
+| **🧪 Tests Unitaires** | `tests/test_ocr_helpers.py` | Normalisation des plaques marocaines & multi-pays, nettoyage de caractères parasites, similarité Levenshtein. |
+| **🔗 Intégration API** | `tests/test_api_endpoints.py` | Validation des routes REST FastAPI (`/health`, `/api/dashboard/stats`, `/api/analytics/rapport`, `/api/events/active`, `/api/events/finished-today`). |
+| **🔄 End-to-End (E2E)** | `tests/test_e2e_lifecycle.py` | Simulation du parcours complet (`Entrée Porte` → `Parking` → `Bascule` → `Ensachage` → `Sortie`), calcul automatique des durées et clôture du cycle. |
+| **⚡ Cache & Performance** | `tests/test_redis_cache.py` | Validation de la connexion Redis, écriture/lecture avec TTL, et invalidation automatique du cache lors de l'ingestion d'événements. |
+| **🚨 Métier & Algorithmes** | `tests/test_anomaly_detector.py` | Algorithmes d'analyse d'`AnomalyDetector` : détection du poste bloquant et calcul précis des dépassements de seuils. |
+| **🛡️ Sécurité & Cas Limites** | `tests/test_edge_cases_security.py` | Validation stricte des schémas Pydantic (HTTP 422), gestion des erreurs 404, robustesse face aux entrées corrompues et en-têtes CORS. |
+
+### 📚 2. Tests Frontend (`Vitest` + React Testing Library — 39 tests) :
+
+| Composant / Hook | Fichier Test | Description & Couverture |
+| :--- | :--- | :--- |
+| **🚛 `TruckCard`** | `frontend/src/tests/TruckCard.test.tsx` | Timeline 6 étapes, affichage zone active, calcul temps en usine, badges anomalies, calcul des ETA dynamiques `~HH:MM`, support plaques arabes. |
+| **⚡ `useWebSocket`** | `frontend/src/tests/useWebSocket.test.ts` | Cycle de vie WebSocket (connexion, déconnexion), filtrage des pings/pongs, dispatching des updates d'événements temps réel, cleanup au démontage. |
+| **🌐 `api.ts`** | `frontend/src/tests/api.test.ts` | Appels REST avec mock MSW (`getDashboardStats`, `getActiveEvents`, `getDureesMoyennes`, `createDelayCause`), gestion des erreurs HTTP 404/500. |
+| **📡 `OfflineBanner` & PWA** | `frontend/src/tests/OfflineBanner.test.tsx` | Mode hors-ligne, bandeau rouge/jaune, comptage requêtes IndexedDB en attente, déclenchement manuel de sync, toast de confirmation auto-dismiss. |
 
 ### 🚀 Exécuter les tests :
 
 ```bash
-# Lancer tous les tests dans le conteneur Docker backend
+# 1. Tests Backend (Docker)
 docker exec lafarge_backend pytest -v
+
+# 2. Tests Frontend (Vitest)
+cd frontend && npm test
 ```
 
 ---

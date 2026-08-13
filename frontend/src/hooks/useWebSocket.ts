@@ -14,7 +14,12 @@ export function useWebSocket(url: string) {
       const interval = setInterval(() => {
         if (socket.readyState === WebSocket.OPEN) socket.send('ping');
       }, 30000);
-      socket.onclose = () => clearInterval(interval);
+      const prevOnClose = socket.onclose;
+      socket.onclose = (ev) => {
+        clearInterval(interval);
+        setIsConnected(false);
+        if (prevOnClose) (prevOnClose as any)(ev);
+      };
     };
 
     socket.onmessage = (event) => {

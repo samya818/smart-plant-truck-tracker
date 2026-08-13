@@ -27,6 +27,22 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src')
     }
-  }
+  },
+  // ── Vitest — configuration du test runner ─────────────────────────────────
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/tests/setup.ts'],
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/components/**', 'src/hooks/**', 'src/services/**'],
+      exclude: ['src/tests/**'],
+    },
+  },
 })
+
 
