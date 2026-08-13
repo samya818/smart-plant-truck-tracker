@@ -49,6 +49,36 @@ def list_active_events(db: Session = Depends(get_db)):
     return events
 
 
+@router.get("/finished-today")
+def list_finished_today(db: Session = Depends(get_db)):
+    """
+    Retourne la liste des camions ayant terminé leur cycle aujourd'hui.
+    """
+    depuis_aujourdhui = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    cycles = (
+        db.query(Cycle)
+        .options(joinedload(Cycle.truck))
+        .filter(
+            Cycle.status == TruckStatus.TERMINE,
+            Cycle.sortie_porte >= depuis_aujourdhui
+        )
+        .order_by(Cycle.sortie_porte.desc())
+        .limit(20)
+        .all()
+    )
+    return [
+        {
+            "id": c.id,
+            "immatriculation": c.truck.immatriculation if c.truck else f"Camion #{c.truck_id}",
+            "entree_porte": c.entree_porte,
+            "sortie_porte": c.sortie_porte,
+            "duree_total": round(c.duree_total, 1),
+            "est_anomalie": c.est_anomalie
+        }
+        for c in cycles
+    ]
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # CIRCUIT DE CONFIRMATION OCR FAIBLE CONFIANCE
 # ═══════════════════════════════════════════════════════════════════════════

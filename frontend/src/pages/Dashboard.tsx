@@ -56,6 +56,57 @@ function groupEventsByTruck(events: Event[]): Map<number, Event[]> {
   return map;
 }
 
+interface FinishedTruck {
+  id: number;
+  immatriculation: string;
+  entree_porte: string;
+  sortie_porte: string;
+  duree_total: number;
+  est_anomalie: boolean;
+}
+
+function FinishedTrucksSection() {
+  const [finished, setFinished] = useState<FinishedTruck[]>([]);
+
+  useEffect(() => {
+    fetch('/api/events/finished-today')
+      .then(res => res.json())
+      .then(data => setFinished(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
+
+  if (finished.length === 0) return null;
+
+  return (
+    <div className="bg-white rounded-lg shadow p-6 border-t-4 border-emerald-500">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+          <span>✅</span> Camions sortis (cycles terminés aujourd'hui)
+        </h2>
+        <span className="text-xs font-semibold bg-emerald-100 text-emerald-800 px-3 py-1 rounded-full">
+          {finished.length} camion{finished.length > 1 ? 's' : ''} terminé{finished.length > 1 ? 's' : ''}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        {finished.map(truck => (
+          <div key={truck.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 hover:border-emerald-300 transition-colors">
+            <div className="flex items-center justify-between font-bold text-slate-800 text-sm mb-1">
+              <span>🚚 {truck.immatriculation}</span>
+              <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                {truck.duree_total} min
+              </span>
+            </div>
+            <div className="text-xs text-slate-500 space-y-0.5">
+              <div>Entrée : {truck.entree_porte ? new Date(truck.entree_porte).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</div>
+              <div>Sortie : {truck.sortie_porte ? new Date(truck.sortie_porte).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '--:--'}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
@@ -232,6 +283,8 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* ── Camions TERMINÉS aujourd'hui ── */}
+          <FinishedTrucksSection />
 
         </div>
 
