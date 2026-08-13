@@ -21,9 +21,16 @@ def list_cycles(db: Session = Depends(get_db)):
     return db.query(Cycle).options(joinedload(Cycle.truck)).order_by(Cycle.entree_porte.desc()).limit(100).all()
 
 
+from app.cache import cache_get, cache_set
+
 @router.get("/durees-moyennes")
 def get_durees_moyennes(db: Session = Depends(get_db)):
-    """Durées moyennes par étape (sur 30 jours)."""
+    """Durées moyennes par étape (sur 30 jours). Mise en cache Redis (TTL 60s)."""
+    cache_key = "analytics:durees_moyennes"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
     depuis = datetime.utcnow() - timedelta(days=30)
     cycles = db.query(Cycle).filter(
         Cycle.status == TruckStatus.TERMINE,
@@ -46,7 +53,7 @@ def get_durees_moyennes(db: Session = Depends(get_db)):
         vals = [v for v in lst if v and v > 0]
         return round(sum(vals) / len(vals), 1) if vals else 0.0
 
-    return {
+    res = {
         "parking":        {"moyenne": avg([c.duree_parking for c in cycles]),      "nb_cycles": len(cycles)},
         "bascule_tare":   {"moyenne": avg([c.duree_bascule_tare for c in cycles]), "nb_cycles": len(cycles)},
         "ensachage":      {"moyenne": avg([c.duree_ensachage for c in cycles]),    "nb_cycles": len(cycles)},
@@ -55,6 +62,8 @@ def get_durees_moyennes(db: Session = Depends(get_db)):
         "nb_cycles_total": len(cycles),
         "source": "historique_30j"
     }
+    cache_set(cache_key, res, ttl=60)
+    return res
 
 
 @router.get("/stats-retards-services")

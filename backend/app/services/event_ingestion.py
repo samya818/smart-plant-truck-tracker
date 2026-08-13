@@ -17,6 +17,7 @@ from app.models import (
     Event, Truck, Cycle, PosteType, PosteConfig,
     CaptureMode, DelayCause, TruckStatus
 )
+from app.cache import cache_invalidate
 
 # ─── Constantes ─────────────────────────────────────────────────────────────
 GAP_ROUTE_MINUTES = 3        # Temps minimal entre sortie inférée et nouvelle entrée
@@ -137,8 +138,12 @@ class EventIngestionService:
                 loop.create_task(manager.broadcast(payload))
             except RuntimeError:
                 pass
-        except ImportError:
+        except Exception:
             pass
+
+        # ── Invalidation cache Redis ───────────────────────────────────────
+        cache_invalidate("dashboard:*")
+        cache_invalidate("analytics:*")
 
         return event
 

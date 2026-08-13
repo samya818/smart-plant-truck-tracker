@@ -78,12 +78,20 @@ def update_seuils(payload: SeuilsPayload, db: Session = Depends(get_db)):
     return {"status": "ok", "message": "Seuils mis à jour avec succès", "seuils": payload.dict()}
 
 
+from app.cache import cache_get, cache_set
+
 @router.get("/stats", response_model=DashboardStats)
 def get_stats(db: Session = Depends(get_db)):
     """
     KPIs calculés depuis la table EVENTS (même source que le frontend).
     Garantit la cohérence avec ce que l'utilisateur voit dans l'interface.
+    Mise en cache Redis (TTL 15s).
     """
+    cache_key = "dashboard:stats"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
     # Fuseau horaire Maroc (UTC+1)
     tz_maroc = timezone(timedelta(hours=1))
     now_maroc = datetime.now(tz=tz_maroc)
@@ -138,7 +146,7 @@ def get_stats(db: Session = Depends(get_db)):
     ).order_by(DelayCause.usage_count.desc()).first()
     top_cause_name = top_cause.nom if top_cause else None
 
-    return DashboardStats(
+    res = DashboardStats(
         camions_en_cours=camions_en_cours,
         camions_aujourdhui=camions_aujourdhui,
         temps_moyen_cycle=round(temps_moyen, 1),
@@ -146,6 +154,8 @@ def get_stats(db: Session = Depends(get_db)):
         alertes_actives=alertes,
         top_cause_retard=top_cause_name
     )
+    cache_set(cache_key, res.dict(), ttl=15)
+    return res
 
 
 # ── Schémas Étapes ────────────────────────────────────────────────────────────
