@@ -1069,10 +1069,26 @@ docker exec lafarge_backend pytest -v
     <li>Une connexion Internet pour le telechargement initial des images de base.</li>
   </ul>
 
-  <h2>5.2 Installation en trois commandes</h2>
-  <p>Le deploiement complet de la plateforme est entierement conteneurise. Aucune dependance systeme specifique n'est requise en dehors de Docker.</p>
+  <h2>5.2 Deploiement industriel automatise (Ready-to-Deploy)</h2>
+  <p>L'un des atouts majeurs de la plateforme Smart-Truck-Tracker reside dans son caractere <strong>cle en main (&laquo; Ready-to-Deploy &raquo;)</strong>. L'equipe IT de l'usine n'a besoin d'installer aucune dependance logicielle locale (pas d'installation manuelle de Python, Node.js, PostgreSQL ou Redis). Deux scripts automatises couvrent l'integralite des architectures serveurs rencontrees en industrie :</p>
+
+  <h3>Option 1 &mdash; Deploiement sur serveur d'usine Linux (Ubuntu / Debian / RHEL)</h3>
+  <p>L'execution du script shell <code>deploy.sh</code> configure automatiquement les permissions, genere le fichier d'environnement <code>.env</code> en mode production reelle (<code>CV_MODE=real</code>), prepare les volumes persistants et lance les conteneurs en arriere-plan :</p>
   <div class="code-block">
-<span class="comment"># 1. Cloner le repository depuis GitHub</span>
+<span class="comment"># Deploiement automatique sous Linux</span>
+chmod +x deploy.sh &amp;&amp; ./deploy.sh
+  </div>
+
+  <h3>Option 2 &mdash; Deploiement sur serveur / poste Windows (PowerShell)</h3>
+  <p>Le script PowerShell <code>setup-lafarge.ps1</code> detecte l'adresse IP reseau locale du serveur, configure les variables d'environnement et demarre la stack complete :</p>
+  <div class="code-block">
+<span class="comment"># Deploiement automatique sous Windows</span>
+.\setup-lafarge.ps1
+  </div>
+
+  <h3>Option 3 &mdash; Deploiement manuel standard Docker Compose</h3>
+  <div class="code-block">
+<span class="comment"># 1. Cloner le repository</span>
 git clone https://github.com/samya818/smart-plant-truck-tracker.git
 cd smart-plant-truck-tracker
 
@@ -1082,7 +1098,7 @@ cp .env.example .env
 <span class="comment"># 3. Construire les images et lancer l'ensemble des services</span>
 docker compose up -d --build
   </div>
-  <p>Les cinq services demarrent automatiquement : backend FastAPI, frontend React, PostgreSQL, Redis, et Nginx. L'option <code>-d</code> execute les conteneurs en arriere-plan (mode detache).</p>
+  <p>Les cinq services demarrent automatiquement : backend FastAPI, frontend React/Nginx, base PostgreSQL, cache Redis, et Adminer.</p>
 
   <h2>5.3 Acces aux interfaces</h2>
   <p>Une fois le deploiement termine, les interfaces suivantes sont accessibles depuis un navigateur web :</p>

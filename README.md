@@ -384,14 +384,28 @@ erDiagram
 
 ---
 
-## 🚀 Démarrage Rapide — 3 Commandes
+## 🚀 Déploiement Industriel Clé en Main (Ready-to-Deploy)
 
-### Prérequis
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et lancé
-- [Git](https://git-scm.com/) installé
+La plateforme est conçue pour un **déploiement immédiat en environnement industriel** sans aucune installation de dépendances locales complexes (Python, PostgreSQL, Redis ou Node.js ne sont pas nécessaires sur l'hôte).
 
-### Installation
+### 🐧 Option 1 : Déploiement sur Serveur d'Usine Linux (Ubuntu / Debian / RHEL)
+Une seule commande suffit pour initialiser et lancer l'ensemble de la stack :
+```bash
+chmod +x deploy.sh && ./deploy.sh
+```
+*Le script configure automatiquement le fichier `.env`, active le mode réel d'usine (`CV_MODE=real`), crée les volumes persistants et lance les conteneurs en arrière-plan.*
 
+---
+
+### 🪟 Option 2 : Déploiement sur Serveur ou PC Windows
+```powershell
+.\setup-lafarge.ps1
+```
+*Le script détecte l'adresse IP réseau locale du serveur, configure les variables d'environnement et démarre Docker Desktop.*
+
+---
+
+### 🐳 Option 3 : Déploiement Manuel via Docker Compose
 ```bash
 # 1. Cloner le projet
 git clone https://github.com/samya818/smart-plant-truck-tracker.git
@@ -404,17 +418,15 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-> ✅ C'est tout. Les 5 services démarrent automatiquement.
+### 🌐 Points d'Accès de l'Application
 
-### Accéder à l'Application
-
-| Interface | URL | Description |
-|-----------|-----|-------------|
-| 🖥️ **Dashboard Superviseur** | http://localhost | Écran principal de monitoring |
-| 📊 **Statistiques** | http://localhost/statistiques | Analytiques et rapports |
-| 📱 **Agent Mobile** | http://localhost/mobile | Interface terrain |
-| 🔧 **Documentation API** | http://localhost:8000/docs | Explorateur API interactif |
-| 🗄️ **Admin Base de Données** | http://localhost:8080 | Adminer (navigateur DB) |
+| Interface | URL | Rôle & Description |
+|-----------|-----|--------------------|
+| 🖥️ **Dashboard Superviseur** | `http://<IP_SERVEUR>` | Monitoring temps réel & flux camions |
+| 📊 **Statistiques & Analytiques** | `http://<IP_SERVEUR>/statistiques` | Rapports, conformité par zone & transporteurs |
+| 📱 **Agent Mobile (PWA)** | `http://<IP_SERVEUR>/mobile` | Interface de saisie terrain responsive |
+| 🔧 **Documentation API Interactive** | `http://<IP_SERVEUR>:8000/docs` | Swagger UI OpenAPI 3.0 |
+| 🗄️ **Administration Base de Données** | `http://<IP_SERVEUR>:8080` | Adminer PostgreSQL |
 
 ---
 
