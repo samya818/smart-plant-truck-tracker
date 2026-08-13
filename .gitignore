@@ -32,12 +32,20 @@ Thumbs.db
 *.joblib
 *.h5
 *.onnx
+*.db
+*.sqlite
+*.sqlite3
+*.log
 models/
 data/videos/
 uploads/                                # Photos agent mobile
+ocr_result.json
+report_final.html
+progress.md
 
 # Docker volumes
 docker-volumes/
 
 # Aider history
 .aider*
+
