@@ -39,7 +39,7 @@ export function useOfflineSync(): OfflineSyncState {
       // Tenter de s'enregistrer pour un Background Sync
       if ('serviceWorker' in navigator && 'SyncManager' in window) {
         navigator.serviceWorker.ready.then((registration) => {
-          registration.sync.register('offline-events-sync').catch(console.warn);
+          (registration as any).sync?.register('offline-events-sync').catch(console.warn);
         });
       } else {
         // Navigateurs sans Background Sync : sync manuelle immédiate

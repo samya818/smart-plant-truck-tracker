@@ -270,3 +270,22 @@ class AutoTrainPipeline:
     def _save_metrics(self, metrics: dict):
         with open(self.METRICS_FILE, 'w') as f:
             json.dump(metrics, f, indent=2)
+
+    async def schedule_loop(self, interval_hours: int = 6):
+        """
+        Boucle asynchrone de réentraînement périodique (toutes les interval_hours heures).
+        Lancée au démarrage de FastAPI en tâche de fond.
+        """
+        import asyncio
+        print(f"[AutoTrain] Boucle de réentraînement automatique activée (intervalle: {interval_hours}h)")
+        # Première passe différée de 30 secondes après le démarrage
+        await asyncio.sleep(30)
+        while True:
+            try:
+                # Exécution dans un thread séparé pour ne pas bloquer l'event loop asyncio
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, self.run_training_pipeline)
+            except Exception as e:
+                print(f"[AutoTrain] Erreur lors du réentraînement planifié : {e}")
+            await asyncio.sleep(interval_hours * 3600)
+

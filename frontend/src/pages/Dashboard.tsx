@@ -113,6 +113,10 @@ export default function Dashboard() {
   const [posteConfigs, setPosteConfigs] = useState<PosteConfig[]>([]);
   const [editingPoste, setEditingPoste] = useState<string | null>(null);
   const [tempUrl, setTempUrl] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorState, setErrorState] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
   // ── Étapes dynamiques ──────────────────────────────────────────
   const [etapes, setEtapes] = useState<Etape[]>([]);
   const [editingEtapeId, setEditingEtapeId] = useState<number | null>(null);
@@ -127,19 +131,50 @@ export default function Dashboard() {
     expires: AnomalieItem[];
     total_alertes: number;
   } | null>(null);
-  const { lastMessage, isConnected } = useWebSocket(getWsUrl());
+
+  const reloadData = useCallback(async (isManual: boolean = false) => {
+    if (isManual) setIsRefreshing(true);
+    try {
+      const [statsData, eventsData, configsData] = await Promise.all([
+        getDashboardStats(),
+        getActiveEvents(),
+        getPosteConfigs(),
+      ]);
+      setStats(statsData);
+      setEvents(eventsData);
+      setPosteConfigs(configsData);
+      setErrorState(null);
+    } catch (err: any) {
+      console.error('[Dashboard] Erreur chargement REST:', err);
+      setErrorState(err.message || 'Impossible de joindre le serveur API');
+    } finally {
+      setIsLoading(false);
+      if (isManual) setIsRefreshing(false);
+    }
+  }, []);
+
+  const { lastMessage, isConnected, reconnect } = useWebSocket(getWsUrl(), {
+    onReconnect: () => {
+      reloadData(false);
+      loadAnomalies();
+    }
+  });
 
   const loadEtapes = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/dashboard/etapes`);
-      setEtapes(await res.json());
+      if (res.ok) {
+        setEtapes(await res.json());
+      }
     } catch { /* silencieux */ }
   }, []);
 
   const loadAnomalies = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/dashboard/anomalies`);
-      setAnomalies(await res.json());
+      if (res.ok) {
+        setAnomalies(await res.json());
+      }
     } catch { /* silencieux */ }
   }, []);
 
@@ -179,14 +214,8 @@ export default function Dashboard() {
     setShowAddForm(false);
   };
 
-  const reloadData = () => {
-    getDashboardStats().then(setStats);
-    getActiveEvents().then(setEvents);
-    getPosteConfigs().then(setPosteConfigs);
-  };
-
-  useEffect(() => { reloadData(); loadEtapes(); loadAnomalies(); }, [loadEtapes, loadAnomalies]);
-  useEffect(() => { if (lastMessage) { reloadData(); loadAnomalies(); } }, [lastMessage]);
+  useEffect(() => { reloadData(); loadEtapes(); loadAnomalies(); }, [reloadData, loadEtapes, loadAnomalies]);
+  useEffect(() => { if (lastMessage) { reloadData(); loadAnomalies(); } }, [lastMessage, reloadData, loadAnomalies]);
 
   const handleToggleMode = (posteName: string, currentMode: 'camera' | 'agent' | 'hybrid') => {
     const modes: ('camera' | 'agent' | 'hybrid')[] = ['camera', 'agent', 'hybrid'];
@@ -230,34 +259,76 @@ export default function Dashboard() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">🏭 Espace Superviseur — LafargeHolcim Meknès</h1>
           <p className="text-sm text-gray-500">Traçabilité bi-mode et optimisation des flux camions</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => reloadData(true)}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-lg transition-colors border border-slate-300 disabled:opacity-50"
+            title="Rafraîchir les données REST"
+          >
+            <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>Actualiser</span>
+          </button>
           <Link
             to="/statistiques"
             className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm"
           >
             <BarChart2 className="w-4 h-4" />
-            📊 Voir les Statistiques
+            📊 Statistiques
           </Link>
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${isConnected ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-            {isConnected ? '● WebSocket Connecté' : '● WebSocket Déconnecté'}
+          <div className="flex items-center gap-2">
+            <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${isConnected ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-amber-100 text-amber-900 border border-amber-300'}`}>
+              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-amber-500'}`} />
+              {isConnected ? 'Temps réel connecté' : 'Temps réel déconnecté (mode REST actif)'}
+            </div>
+            {!isConnected && (
+              <button
+                onClick={reconnect}
+                className="text-xs px-2.5 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-semibold rounded-md transition-colors"
+                title="Tenter une reconnexion immédiate au WebSocket"
+              >
+                Reconnecter
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KPICard title="Camions en cours" value={stats?.camions_en_cours || 0} color="blue" />
-        <KPICard title="Aujourd'hui" value={stats?.camions_aujourdhui || 0} color="green" />
-        <KPICard title="Temps moyen cycle" value={`${Math.round(stats?.temps_moyen_cycle || 0)} min`} color="purple" />
-        <KPICard title="Alertes actives" value={stats?.alertes_actives || 0} color="red" />
+      {/* ── BANNIÈRE D'ERREUR EXPLICITE SI REST ÉCHOUE ── */}
+      {errorState && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🚨</span>
+            <div>
+              <h3 className="text-sm font-bold text-red-800">Erreur de communication avec l'API</h3>
+              <p className="text-xs text-red-600 mt-0.5">{errorState} — Vérifiez que le service backend est actif.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => reloadData(true)}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-md shadow-sm transition-colors flex items-center gap-1.5"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Réessayer
+          </button>
+        </div>
+      )}
+
+      {/* ── GRILLE KPI ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <KPICard title="Camions en cours" value={stats ? stats.camions_en_cours : (isLoading ? '...' : 0)} color="blue" subtitle="Actuellement dans l'usine" />
+        <KPICard title="Aujourd'hui" value={stats ? stats.camions_aujourdhui : (isLoading ? '...' : 0)} color="green" subtitle="Cycles démarrés ce jour" />
+        <KPICard title="Temps moyen cycle" value={stats ? `${Math.round(stats.temps_moyen_cycle)} min` : (isLoading ? '...' : '--')} color="purple" subtitle="Derniers 7 jours" />
+        <KPICard title="Alertes actives" value={stats ? stats.alertes_actives : (isLoading ? '...' : 0)} color="red" subtitle="Cycles en dépassement" />
       </div>
 
-      {stats?.poste_bloquant && <AlertBanner message={`⚠️ Poste bloquant : ${stats.poste_bloquant}`} type="warning" />}
-      {stats?.top_cause_retard && <AlertBanner message={`🔥 Cause fréquente : ${stats.top_cause_retard}`} type="info" />}
+      {stats?.poste_bloquant && <AlertBanner message={`⚠️ Poste bloquant détecté : ${stats.poste_bloquant}`} type="warning" />}
+      {stats?.top_cause_retard && <AlertBanner message={`🔥 Cause de retard la plus fréquente : ${stats.top_cause_retard}`} type="info" />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Liste des camions avec timeline complète du cycle */}
@@ -267,12 +338,20 @@ export default function Dashboard() {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-800">🚚 Camions en cours dans l'usine</h2>
-              <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+              <span className="text-xs font-medium bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">
                 {encours.length} actif{encours.length > 1 ? 's' : ''}
               </span>
             </div>
-            {encours.length === 0 ? (
-              <p className="text-gray-500 italic text-sm">Aucun camion en cours actuellement.</p>
+            {isLoading ? (
+              <div className="py-8 text-center text-sm text-gray-400 flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
+                Chargement des camions en cours...
+              </div>
+            ) : encours.length === 0 ? (
+              <div className="py-8 text-center text-gray-500 bg-slate-50 border border-slate-100 rounded-lg">
+                <p className="text-base font-semibold text-slate-700">✅ Aucun camion en cours actuellement</p>
+                <p className="text-xs text-slate-400 mt-1">Tous les camions entrés ont terminé leur cycle ou aucun nouveau camion n'a été détecté.</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {encours.map(([truckId, truckEvents]) => {
@@ -632,15 +711,19 @@ export default function Dashboard() {
   );
 }
 
-function KPICard({ title, value, color }: { title: string; value: string | number; color: string }) {
+function KPICard({ title, value, color, subtitle }: { title: string; value: string | number; color: string; subtitle?: string }) {
   const colors: Record<string, string> = {
-    blue: 'bg-blue-50 text-blue-900', green: 'bg-green-50 text-green-900',
-    purple: 'bg-purple-50 text-purple-900', red: 'bg-red-50 text-red-900',
+    blue: 'bg-blue-50 text-blue-900 border border-blue-100',
+    green: 'bg-green-50 text-green-900 border border-green-100',
+    purple: 'bg-purple-50 text-purple-900 border border-purple-100',
+    red: 'bg-red-50 text-red-900 border border-red-100',
   };
   return (
-    <div className={`rounded-lg p-4 ${colors[color]}`}>
-      <p className="text-sm opacity-75">{title}</p>
-      <p className="text-3xl font-bold">{value}</p>
+    <div className={`rounded-xl p-4 transition-all shadow-sm ${colors[color]}`}>
+      <p className="text-xs font-semibold opacity-75 uppercase tracking-wider">{title}</p>
+      <p className="text-3xl font-extrabold my-1">{value}</p>
+      {subtitle && <p className="text-[11px] opacity-60 font-medium">{subtitle}</p>}
     </div>
   );
 }
+

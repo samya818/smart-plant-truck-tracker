@@ -68,5 +68,15 @@ export function useWebSocket(url: string, options?: UseWebSocketOptions) {
     };
   }, [connect]);
 
-  return { lastMessage, isConnected };
+  const reconnect = useCallback(() => {
+    if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+    if (ws.current) {
+      ws.current.onclose = null;
+      ws.current.close();
+    }
+    connect();
+  }, [connect]);
+
+  return { lastMessage, isConnected, reconnect };
 }
+

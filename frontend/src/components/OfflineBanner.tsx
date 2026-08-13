@@ -22,6 +22,7 @@ export const OfflineBanner: React.FC = () => {
       const t = setTimeout(() => setShowSyncConfirm(false), 3000);
       return () => clearTimeout(t);
     }
+    return undefined;
   }, [lastSyncTime]);
 
   // Si online et aucune confirmation récente → rien à afficher

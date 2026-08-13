@@ -72,11 +72,11 @@ const server = setupServer(
   http.get('/api/events/active',   () => HttpResponse.json(EVENTS_FIXTURE)),
   http.get('/api/analytics/durees-moyennes', () => HttpResponse.json(DUREES_FIXTURE)),
   http.post('/api/mobile/delay-causes', async ({ request }) => {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, any>;
     return HttpResponse.json({ id: 999, ...body }, { status: 201 });
   }),
   http.put('/api/mobile/poste-configs/:poste', async ({ params, request }) => {
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, any>;
     return HttpResponse.json({ poste: params.poste, ...body });
   }),
 );

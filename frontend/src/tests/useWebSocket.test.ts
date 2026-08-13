@@ -9,7 +9,7 @@
  *  5. Déconnexion → isConnected = false
  *  6. Nettoyage (socket fermé au démontage)
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useWebSocket } from '@/hooks/useWebSocket';
 

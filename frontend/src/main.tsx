@@ -13,8 +13,8 @@ if ('serviceWorker' in navigator) {
 
         // Enregistrer un Background Sync dès que possible
         if ('SyncManager' in window) {
-          registration.sync
-            .register('offline-events-sync')
+          (registration as any).sync
+            ?.register('offline-events-sync')
             .catch(() => {/* navigateur ne supporte pas BackgroundSync */});
         }
       })
