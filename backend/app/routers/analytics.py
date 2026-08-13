@@ -32,33 +32,37 @@ def get_durees_moyennes(db: Session = Depends(get_db)):
         return cached
 
     depuis = datetime.utcnow() - timedelta(days=30)
+    # Filtre uniquement les cycles réalistes (duree_total >= 10 min) pour ne pas polluer avec les anciens tests
     cycles = db.query(Cycle).filter(
         Cycle.status == TruckStatus.TERMINE,
         Cycle.entree_porte >= depuis,
-        Cycle.duree_total > 0
+        Cycle.duree_total >= 10.0
     ).all()
 
-    if not cycles:
-        return {
-            "parking":        {"moyenne": 15.0, "nb_cycles": 0},
-            "bascule_tare":   {"moyenne": 10.0, "nb_cycles": 0},
-            "ensachage":      {"moyenne": 45.0, "nb_cycles": 0},
-            "bascule_brut":   {"moyenne": 10.0, "nb_cycles": 0},
-            "porte_sortie":   {"moyenne": 5.0,  "nb_cycles": 0},
-            "nb_cycles_total": 0,
-            "source": "valeurs_par_defaut"
+    if len(cycles) < 10:
+        # Valeurs réalistes de référence usine si peu de données historiques
+        res = {
+            "parking":        {"moyenne": 20.0, "nb_cycles": len(cycles)},
+            "bascule_tare":   {"moyenne": 10.0, "nb_cycles": len(cycles)},
+            "ensachage":      {"moyenne": 35.0, "nb_cycles": len(cycles)},
+            "bascule_brut":   {"moyenne": 10.0, "nb_cycles": len(cycles)},
+            "porte_sortie":   {"moyenne": 5.0,  "nb_cycles": len(cycles)},
+            "nb_cycles_total": len(cycles),
+            "source": "valeurs_de_reference_usine"
         }
+        cache_set(cache_key, res, ttl=60)
+        return res
 
-    def avg(lst):
-        vals = [v for v in lst if v and v > 0]
-        return round(sum(vals) / len(vals), 1) if vals else 0.0
+    def avg(lst, default_val=10.0):
+        vals = [v for v in lst if v and v >= 1.0]
+        return round(sum(vals) / len(vals), 1) if vals else default_val
 
     res = {
-        "parking":        {"moyenne": avg([c.duree_parking for c in cycles]),      "nb_cycles": len(cycles)},
-        "bascule_tare":   {"moyenne": avg([c.duree_bascule_tare for c in cycles]), "nb_cycles": len(cycles)},
-        "ensachage":      {"moyenne": avg([c.duree_ensachage for c in cycles]),    "nb_cycles": len(cycles)},
-        "bascule_brut":   {"moyenne": avg([c.duree_bascule_brut for c in cycles]), "nb_cycles": len(cycles)},
-        "porte_sortie":   {"moyenne": 5.0,                                          "nb_cycles": len(cycles)},
+        "parking":        {"moyenne": avg([c.duree_parking for c in cycles], 20.0),      "nb_cycles": len(cycles)},
+        "bascule_tare":   {"moyenne": avg([c.duree_bascule_tare for c in cycles], 10.0), "nb_cycles": len(cycles)},
+        "ensachage":      {"moyenne": avg([c.duree_ensachage for c in cycles], 35.0),    "nb_cycles": len(cycles)},
+        "bascule_brut":   {"moyenne": avg([c.duree_bascule_brut for c in cycles], 10.0), "nb_cycles": len(cycles)},
+        "porte_sortie":   {"moyenne": 5.0,                                               "nb_cycles": len(cycles)},
         "nb_cycles_total": len(cycles),
         "source": "historique_30j"
     }
