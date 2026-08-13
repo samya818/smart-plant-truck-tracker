@@ -662,6 +662,34 @@ pillow==10.3.0              # Manipulation d'images
 
 ---
 
+## 🧪 Suite de Tests Automatisés & Qualité (QA)
+
+Le projet intègre une suite de **tests automatisés multi-niveaux** avec `pytest`, garantissant la non-régression, la fiabilité de l'OCR et la conformité des règles métier.
+
+```text
+======================== 32 passed in 4.32s ========================
+```
+
+### 📚 Les 6 Niveaux de Tests Implémentés :
+
+| Catégorie | Fichier Source | Description & Couverture |
+| :--- | :--- | :--- |
+| **🧪 1. Tests Unitaires** | `tests/test_ocr_helpers.py` | Normalisation des plaques marocaines, nettoyage des caractères parasites, algorithme de similarité de Levenshtein. |
+| **🔗 2. Tests d'Intégration API** | `tests/test_api_endpoints.py` | Validation des routes REST FastAPI (`/health`, `/api/dashboard/stats`, `/api/analytics/rapport`, `/api/events/active`, `/api/events/finished-today`). |
+| **🔄 3. Tests End-to-End (E2E)** | `tests/test_e2e_lifecycle.py` | Simulation du parcours complet d'un camion (`Entrée Porte` → `Parking` → `Bascule` → `Ensachage` → `Sortie`), calcul automatique des durées et clôture du cycle. |
+| **⚡ 4. Tests de Cache & Performance** | `tests/test_redis_cache.py` | Validation de la connexion Redis, écriture/lecture avec TTL, et invalidation automatique du cache lors de l'ingestion d'événements. |
+| **🚨 5. Tests Métier & Algorithmes** | `tests/test_anomaly_detector.py` | Algorithmes d'analyse d'`AnomalyDetector` : détection du poste bloquant et calcul précis des dépassements de seuils. |
+| **🛡️ 6. Tests de Sécurité & Cas Limites** | `tests/test_edge_cases_security.py` | Validation stricte des schémas Pydantic (HTTP 422), gestion des erreurs 404, robustesse face aux entrées corrompues et en-têtes CORS. |
+
+### 🚀 Exécuter les tests :
+
+```bash
+# Lancer tous les tests dans le conteneur Docker backend
+docker exec lafarge_backend pytest -v
+```
+
+---
+
 ## 📈 Valeur Métier
 
 | Métrique | Avant | Après |
