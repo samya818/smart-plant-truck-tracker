@@ -20,7 +20,10 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from app.database import SessionLocal
 from app.models import Cycle, TruckStatus
-from app.services.feature_engineering import build_features_matrix_train, FEATURE_COLUMNS
+from app.services.feature_engineering import (
+    build_features_matrix_train, FEATURE_COLUMNS,
+    get_valid_ml_cycles, ML_TRAINING_THRESHOLD, ML_PRODUCTION_THRESHOLD
+)
 
 def calculate_mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """Mean Absolute Percentage Error avec protection division par zéro."""
@@ -43,27 +46,14 @@ class AutoTrainPipeline:
         try:
             print("[AutoTrain] Démarrage du pipeline d'entraînement temporel...")
 
-            # Récupérer les IDs des cycles simulés pour les exclure si nécessaire
-            cycles_simules_ids = [
-                row[0] for row in db.query(Cycle.id).filter(
-                    Cycle.truck_id.in_([1, 2, 3, 4, 5, 6])
-                ).all()
-            ]
+            # Extraction des cycles réels via la politique centralisée (MÊME critères que PredictionService)
+            cycles_bruts = get_valid_ml_cycles(db, Cycle, TruckStatus)
 
-            # Extraction des cycles réels complets et non anormaux
-            cycles_bruts = db.query(Cycle).filter(
-                Cycle.status == TruckStatus.TERMINE,
-                Cycle.duree_total.isnot(None),
-                Cycle.duree_total >= 10,              # Filtre qualité : durée minimale réaliste (10 min)
-                Cycle.est_anomalie == False,          # Exclut les pannes exceptionnelles
-                ~Cycle.id.in_(cycles_simules_ids),
-            ).order_by(Cycle.entree_porte.asc()).all()
-
-            if len(cycles_bruts) < 30:
-                print(f"[AutoTrain] Nombre insuffisant de cycles ({len(cycles_bruts)} < 30 requises).")
+            if len(cycles_bruts) < ML_TRAINING_THRESHOLD:
+                print(f"[AutoTrain] Nombre insuffisant de cycles ({len(cycles_bruts)} < {ML_TRAINING_THRESHOLD} requises).")
                 return {
                     "status": "skipped",
-                    "raison": f"{len(cycles_bruts)} cycles valides (< 30 minimum pour benchmark statistique)",
+                    "raison": f"{len(cycles_bruts)} cycles valides (< {ML_TRAINING_THRESHOLD} minimum pour benchmark statistique)",
                 }
 
             # Construction du DataFrame trié chronologiquement
@@ -183,10 +173,12 @@ class AutoTrainPipeline:
                 return {"status": "failed", "raison": "Aucun modèle n'a pu être évalué"}
 
             # Sauvegarde conditionnelle des modèles (Champion vs Challenger)
+            # On passe aussi la MAE de la baseline pour normaliser la comparaison cross-dataset
+            baseline_mae = models_metrics['baseline_mean']['mae']
             if 'prophet' in candidats:
-                self._save_model('prophet_champion.pkl', candidats['prophet'], models_metrics['prophet'], len(df), train_median_y)
+                self._save_model('prophet_champion.pkl', candidats['prophet'], models_metrics['prophet'], len(df), train_median_y, baseline_mae)
             if 'xgboost' in candidats:
-                self._save_model('xgboost_champion.pkl', candidats['xgboost'], models_metrics['xgboost'], len(df), train_median_y)
+                self._save_model('xgboost_champion.pkl', candidats['xgboost'], models_metrics['xgboost'], len(df), train_median_y, baseline_mae)
 
             # Enregistrement des métriques vérifiées
             result_payload = {
@@ -214,30 +206,56 @@ class AutoTrainPipeline:
         """Exécution synchrone pour les tests et scripts."""
         return self.run_training_pipeline()
 
-    def _save_model(self, filename: str, model: Any, metrics: dict, n_samples: int, train_median: float):
+    def _save_model(
+        self, filename: str, model: Any, metrics: dict,
+        n_samples: int, train_median: float, baseline_mae: float = 1.0
+    ):
         """
-        Sauvegarde conditionnelle (Champion vs Challenger) avec versionnement d'artefact :
-        Consigne l'empreinte de schéma, la version des caractéristiques et les métriques multi-critères.
+        Sauvegarde conditionnelle (Champion vs Challenger) avec versionnement d'artefact.
+
+        Problème de comparaison cross-dataset :
+        Comme le dataset grandit entre deux réentraînements (le test_1 ≠ test_2),
+        comparer MAE absolues est statistiquement biaisé. On utilise à la place
+        le ratio MAE_relative = MAE_candidat / MAE_baseline qui est normalisé
+        par rapport au niveau de difficulté du dataset courant.
+
+        Exemple :
+            Réentraînement J1 : MAE_candidat=12min, MAE_baseline=20min → relative=0.60
+            Réentraînement J2 : MAE_candidat=13min, MAE_baseline=22min → relative=0.59
+            Malgré une MAE absolue plus élevée, le candidat J2 est promu car
+            il performe mieux relativement à son propre dataset.
         """
         path = os.path.join(self.MODEL_DIR, filename)
         new_mae = metrics.get('mae', float('inf'))
+        # MAE relative = MAE / baseline_mae (normalisée par la difficulté du dataset)
+        new_relative_mae = new_mae / max(baseline_mae, 0.1)
 
         if os.path.exists(path):
             try:
                 with open(path, 'rb') as f:
                     old_artifact = pickle.load(f)
-                old_mae = old_artifact.get('mae', float('inf'))
-                if new_mae >= old_mae:
-                    print(f"[AutoTrain] 🛑 Modèle candidat REJETÉ pour {filename} : MAE={new_mae:.2f}m >= Champion existant MAE={old_mae:.2f}m (Pas de régression)")
+                old_relative_mae = old_artifact.get('relative_mae', float('inf'))
+                if new_relative_mae >= old_relative_mae:
+                    print(
+                        f"[AutoTrain] 🛑 Candidat REJETÉ pour {filename} : "
+                        f"MAE_rel={new_relative_mae:.3f} >= Champion MAE_rel={old_relative_mae:.3f} "
+                        f"(MAE abs: {new_mae:.2f}m vs baseline {baseline_mae:.2f}m)"
+                    )
                     return
                 else:
-                    print(f"[AutoTrain] 🏆 Nouveau Champion promu pour {filename} : MAE={new_mae:.2f}m < Ancien={old_mae:.2f}m (+{(old_mae-new_mae):.2f}m de gain)")
+                    print(
+                        f"[AutoTrain] 🏆 Nouveau Champion pour {filename} : "
+                        f"MAE_rel={new_relative_mae:.3f} < Ancien={old_relative_mae:.3f} "
+                        f"(MAE abs: {new_mae:.2f}m, gain relatif: {(old_relative_mae-new_relative_mae)*100:.1f}pp)"
+                    )
             except Exception as e:
                 print(f"[AutoTrain] Impossible de lire l'ancien champion ({e}), sauvegarde forcée.")
 
         artifact = {
             'model': model,
             'mae': new_mae,
+            'relative_mae': new_relative_mae,   # Pour comparaison cross-dataset
+            'baseline_mae': baseline_mae,
             'metrics': metrics,
             'feature_schema_version': "2.0.0",
             'feature_names': FEATURE_COLUMNS,

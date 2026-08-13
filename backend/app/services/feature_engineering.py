@@ -1,11 +1,81 @@
 """
 Module Centralisé de Feature Engineering — Prédiction Causale des Temps de Séjour.
 Garantit l'alignement strict (Zero Mismatch) entre l'entraînement (AutoTrain) et l'inférence (PredictionService).
+
+Politique de données ML (Option B — ML expérimental vs production) :
+  - ML_TRAINING_THRESHOLD  = 30  : seuil minimal pour entraîner un modèle
+  - ML_PRODUCTION_THRESHOLD = 100 : seuil pour activer le ML en production (niveau 2)
+  - Les deux seuils utilisent get_valid_ml_cycles() pour des critères identiques.
 """
 import numpy as np
 import pandas as pd
 from datetime import datetime
 from typing import List, Dict, Any, Optional
+
+# ──────────────────────────────────────────────────────────────────────────────
+# POLITIQUE DE DONNÉES ML — UTILISÉE PAR AUTO_TRAIN ET PREDICTION_SERVICE
+# ──────────────────────────────────────────────────────────────────────────────
+# Ces constantes doivent être la SEULE source de vérité pour les seuils ML.
+ML_TRAINING_THRESHOLD: int = 30    # Min pour entraîner (benchmark statistique minimal)
+ML_PRODUCTION_THRESHOLD: int = 100  # Min pour déployer en prod (niveau 2 actif)
+
+# IDs de camions simulés à exclure des données d'entraînement
+SIMULATED_TRUCK_IDS: List[int] = [1, 2, 3, 4, 5, 6]
+
+def get_valid_ml_cycles(db, model_class_cycle, model_class_truck_status) -> list:
+    """
+    Retourne la liste des cycles réels valides pour l'entraînement ML.
+
+    Politique unifiée : MÊME filtre utilisé par AutoTrainPipeline, PredictionService,
+    et toute évaluation de métriques. Garantit que le comptage des cycles en production
+    correspond exactement au dataset d'entraînement.
+
+    Critères d'exclusion :
+    - Cycles non terminés (status != TERMINE)
+    - Durée totale manquante ou < 10 min (artefacts techniques)
+    - Cycles marqués comme anomalie (inférés, auto-fermés, FSM invalides)
+    - Camions simulés (truck_id dans SIMULATED_TRUCK_IDS)
+    """
+    # Utilise une liste directe plutôt qu'un subquery pour éviter le SAWarning
+    # SQLAlchemy ≥ 1.4 : `column.in_(subquery)` requiert `select()` explicite
+    simulated_cycle_ids = [
+        row[0] for row in db.query(model_class_cycle.id).filter(
+            model_class_cycle.truck_id.in_(SIMULATED_TRUCK_IDS)
+        ).all()
+    ]
+    exclude_filter = (~model_class_cycle.id.in_(simulated_cycle_ids)
+                      if simulated_cycle_ids else True)
+
+    return db.query(model_class_cycle).filter(
+        model_class_cycle.status == model_class_truck_status.TERMINE,
+        model_class_cycle.duree_total.isnot(None),
+        model_class_cycle.duree_total >= 10.0,
+        model_class_cycle.est_anomalie == False,    # noqa: E712
+        exclude_filter,
+    ).order_by(model_class_cycle.entree_porte.asc()).all()
+
+
+def count_valid_ml_cycles(db, model_class_cycle, model_class_truck_status) -> int:
+    """
+    Compte les cycles valides pour ML sans les charger en mémoire.
+    Utilise EXACTEMENT les mêmes critères que get_valid_ml_cycles().
+    """
+    simulated_cycle_ids = [
+        row[0] for row in db.query(model_class_cycle.id).filter(
+            model_class_cycle.truck_id.in_(SIMULATED_TRUCK_IDS)
+        ).all()
+    ]
+    exclude_filter = (~model_class_cycle.id.in_(simulated_cycle_ids)
+                      if simulated_cycle_ids else True)
+
+    return db.query(model_class_cycle).filter(
+        model_class_cycle.status == model_class_truck_status.TERMINE,
+        model_class_cycle.duree_total.isnot(None),
+        model_class_cycle.duree_total >= 10.0,
+        model_class_cycle.est_anomalie == False,    # noqa: E712
+        exclude_filter,
+    ).count()
+
 
 # Liste ordonnée et immuable des features du modèle XGBoost
 FEATURE_COLUMNS: List[str] = [

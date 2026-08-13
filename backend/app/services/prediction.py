@@ -18,7 +18,12 @@ from sqlalchemy.orm import Session
 
 from app.models import Event, Cycle, PosteType, TruckStatus, EtapeConfig
 from app.config import get_settings
-from app.services.feature_engineering import build_single_inference_vector
+from app.services.feature_engineering import (
+    build_single_inference_vector,
+    count_valid_ml_cycles,
+    ML_TRAINING_THRESHOLD,
+    ML_PRODUCTION_THRESHOLD,
+)
 
 settings = get_settings()
 
@@ -31,11 +36,28 @@ class PredictionService:
         self.niveau = self._detecter_niveau()
 
     def _detecter_niveau(self) -> int:
-        """Détermine le palier d'apprentissage selon le nombre de cycles réels validés."""
-        count = self.db.query(Cycle).filter(Cycle.status == TruckStatus.TERMINE).count()
-        if count >= 100 and os.path.exists(os.path.join(self.MODEL_DIR, "prophet_champion.pkl")):
+        """
+        Détermine le palier d'apprentissage ML selon le nombre de cycles réels valides.
+
+        Politique explicite (Option B) :
+          Niveau 0 (< 30 cycles)  : Règles métier expertes (EtapeConfig)
+          Niveau 1 (30-99 cycles) : EWMA sur les 7 derniers jours (ML expérimental)
+          Niveau 2 (≥ 100 cycles) : Modèle ML champion (Prophet / XGBoost) en production
+
+        IMPORTANT : on utilise count_valid_ml_cycles() qui applique EXACTEMENT
+        les mêmes critères d'exclusion que get_valid_ml_cycles() dans AutoTrain :
+        - Exclut les camions simulés (truck_ids 1-6)
+        - Exclut les cycles anomalie (est_anomalie=True)
+        - Exclut les cycles < 10 min
+        Cela garantit que le niveau ML affiché correspond au volume qui a réellement
+        servi à entraîner le modèle.
+        """
+        count = count_valid_ml_cycles(self.db, Cycle, TruckStatus)
+        if count >= ML_PRODUCTION_THRESHOLD and os.path.exists(
+            os.path.join(self.MODEL_DIR, "prophet_champion.pkl")
+        ):
             return 2
-        elif count >= 30:
+        elif count >= ML_TRAINING_THRESHOLD:
             return 1
         return 0
 
@@ -149,11 +171,13 @@ class PredictionService:
             yhat = float(forecast['yhat'].iloc[0])
             total_estime = max(30.0, yhat)
 
+            mae = artifact.get('mae', None)
+            mae_info = f" (MAE test={mae:.1f}min sur {artifact.get('n_samples',0)} cycles)" if mae else ""
             return {
                 "duree_totale_estimee": total_estime,
                 "methode": "prophet_production",
-                "confiance": "élevée",
-                "note": "Modèle Prophet - Saisonnalités temporelles",
+                "confiance": "modele_valide",
+                "note": f"Forecast Prophet saisonnier{mae_info}. Note : ETA = durée_totale_prévue - temps_écoulé (non conditionné au poste actuel).",
             }
         except Exception as e:
             print(f"[Prediction] Inférence Prophet en échec : {e}")
@@ -189,11 +213,13 @@ class PredictionService:
             yhat = float(model.predict(dmatrix)[0])
             total_estime = max(30.0, yhat)
 
+            mae = artifact.get('mae', None)
+            mae_info = f" (MAE test={mae:.1f}min sur {artifact.get('n_samples',0)} cycles)" if mae else ""
             return {
                 "duree_totale_estimee": total_estime,
                 "methode": "xgboost_challenger",
-                "confiance": "élevée",
-                "note": "Modèle XGBoost - Non-linéarités & dynamique causale",
+                "confiance": "modele_valide",
+                "note": f"Forecast XGBoost temporel{mae_info}. Note : ETA = durée_totale_prévue - temps_écoulé (non conditionné au poste actuel).",
             }
         except Exception as e:
             print(f"[Prediction] Inférence XGBoost en échec : {e}")

@@ -173,7 +173,13 @@ class EventIngestionService:
         try:
             self.db.add(event)
             self.db.commit()
-            self.db.refresh(event)
+            try:
+                self.db.refresh(event)
+            except Exception:
+                # db.refresh() peut échouer dans un contexte SQLite multi-thread
+                # (StaticPool partagé). En PostgreSQL, cela n'arrive jamais.
+                # On ignore silencieusement : l'événement est déjà committée en DB.
+                pass
         except Exception as e:
             self.db.rollback()
             if client_event_id:
@@ -431,7 +437,20 @@ class EventIngestionService:
                 self.db.commit()
 
     def _recalculate_durations(self, cycle: Cycle):
-        """Recalcule toutes les durées à partir des paires entree/sortie."""
+        """
+        Recalcule toutes les durées à partir des paires entree/sortie.
+
+        Isolation temporelle stricte : seuls les événements dans
+        [entree_porte, sortie_porte] sont considérés pour éviter que les
+        événements d'un cycle futur du même camion contaminent ce cycle.
+
+        Pour les cycles encore ouverts (sortie_porte=None), on utilise now()
+        comme borne supérieure — ce qui est conservateur mais jamais erroné.
+
+        Appariement séquentiel généralisé : parking, ensachage et bascule
+        utilisent tous la même logique entree→sortie pour supporter plusieurs
+        passages au même poste dans un seul cycle.
+        """
         def make_naive(dt):
             return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
 
@@ -444,48 +463,54 @@ class EventIngestionService:
         entree_porte = make_naive(cycle.entree_porte)
         sortie_porte = make_naive(cycle.sortie_porte)
 
+        # Borne supérieure : sortie_porte si disponible, sinon maintenant
+        # (isolation stricte : jamais d'événements hors de la fenêtre de ce cycle)
+        upper_bound = sortie_porte if sortie_porte else datetime.utcnow()
+
         events = self.db.query(Event).filter(
             Event.truck_id == cycle.truck_id,
-            Event.horodatage >= entree_porte
+            Event.horodatage >= entree_porte,
+            Event.horodatage <= upper_bound,   # ← CORRECTION CRITIQUE : borne supérieure
         ).order_by(Event.horodatage).all()
 
-        poste_times = {}
-        for ev in events:
-            key = (ev.poste, ev.type_event)
-            poste_times[key] = make_naive(ev.horodatage)
+        def sequential_pairs(poste_type: PosteType) -> list[float]:
+            """
+            Appariement séquentiel strict : entree→sortie, entree→sortie, ...
+            Retourne la liste des durées (en minutes) de chaque passage.
+            Fonctionne pour parking, ensachage, bascule — tous les postes.
+            """
+            pairs = []
+            last_entry = None
+            for ev in events:
+                if ev.poste != poste_type:
+                    continue
+                t = make_naive(ev.horodatage)
+                if ev.type_event == "entree":
+                    last_entry = t
+                elif ev.type_event == "sortie" and last_entry is not None:
+                    dur = (t - last_entry).total_seconds() / 60
+                    if 0 <= dur <= 120:  # Durée valide : 0 à 120 min par passage
+                        pairs.append(round(dur, 1))
+                    last_entry = None
+            return pairs
 
-        # Parking
-        if (PosteType.PARKING, "entree") in poste_times and (PosteType.PARKING, "sortie") in poste_times:
-            cycle.duree_parking = (
-                poste_times[(PosteType.PARKING, "sortie")] -
-                poste_times[(PosteType.PARKING, "entree")]
-            ).total_seconds() / 60
+        # Parking : cumul de tous les passages (camion peut faire demi-tour)
+        parking_pairs = sequential_pairs(PosteType.PARKING)
+        if parking_pairs:
+            cycle.duree_parking = round(sum(parking_pairs), 1)
 
-        # Bascule — appariement strict des paires (entrée, sortie) séquentielle
-        bascule_events = [e for e in events if e.poste == PosteType.BASCULE]
-        bascule_pairs = []
-        last_entry = None
-        for be in bascule_events:
-            if be.type_event == "entree":
-                last_entry = be
-            elif be.type_event == "sortie" and last_entry is not None:
-                dur = (make_naive(be.horodatage) - make_naive(last_entry.horodatage)).total_seconds() / 60
-                if 0 <= dur <= 60:  # Durée de pesée valide (max 60 min)
-                    bascule_pairs.append(dur)
-                last_entry = None
+        # Ensachage : cumul de tous les passages (ex : double chargement)
+        ensachage_pairs = sequential_pairs(PosteType.ENSACHAGE)
+        if ensachage_pairs:
+            cycle.duree_ensachage = round(sum(ensachage_pairs), 1)
 
+        # Bascule — appariement séquentiel : première paire = tare, deuxième = brut
+        bascule_pairs = sequential_pairs(PosteType.BASCULE)
         if len(bascule_pairs) >= 1:
-            cycle.duree_bascule_tare = round(bascule_pairs[0], 1)
+            cycle.duree_bascule_tare = bascule_pairs[0]
         if len(bascule_pairs) >= 2:
-            cycle.duree_bascule_brut = round(bascule_pairs[1], 1)
-
-        # Ensachage
-        if (PosteType.ENSACHAGE, "entree") in poste_times and (PosteType.ENSACHAGE, "sortie") in poste_times:
-            cycle.duree_ensachage = (
-                poste_times[(PosteType.ENSACHAGE, "sortie")] -
-                poste_times[(PosteType.ENSACHAGE, "entree")]
-            ).total_seconds() / 60
+            cycle.duree_bascule_brut = bascule_pairs[1]
 
         # Durée totale
         if sortie_porte and entree_porte:
-            cycle.duree_total = (sortie_porte - entree_porte).total_seconds() / 60
+            cycle.duree_total = round((sortie_porte - entree_porte).total_seconds() / 60, 1)

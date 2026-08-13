@@ -3,8 +3,8 @@
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?style=for-the-badge&logo=react)](https://react.dev)
-[![Tests Backend](https://img.shields.io/badge/Pytest-35%2F35%20Passed%20(100%25)-success?style=for-the-badge&logo=pytest)](https://docs.pytest.org)
-[![Tests Frontend](https://img.shields.io/badge/Vitest-39%2F39%20Passed%20(100%25)-success?style=for-the-badge&logo=vitest)](https://vitest.dev)
+[![Tests Backend](https://img.shields.io/badge/Pytest-36%2F36%20Passed-success?style=for-the-badge&logo=pytest)](https://docs.pytest.org)
+[![Tests Frontend](https://img.shields.io/badge/Vitest-39%2F39%20Passed-success?style=for-the-badge&logo=vitest)](https://vitest.dev)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791?style=for-the-badge&logo=postgresql)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Cache-Redis%207-DC382D?style=for-the-badge&logo=redis)](https://redis.io)
 [![Docker](https://img.shields.io/badge/Deploy-Ready--to--Deploy-2496ED?style=for-the-badge&logo=docker)](https://docker.com)
@@ -228,21 +228,15 @@ Le système intègre un **pipeline d'apprentissage automatique** qui s'améliore
 ```mermaid
 graph LR
     subgraph N0["NIVEAU 0 : Règles Métier Dynamiques"]
-        R0["< 50 événements
-Seuils dynamiques configurés
-en direct par le superviseur dans l'UI"]
+        R0["< 30 cycles réels valides\nSeuils dynamiques configurés\nen direct par le superviseur dans l'UI"]
     end
 
     subgraph N1["NIVEAU 1 : EWMA"]
-        R1["50-499 événements
-Moyenne mobile pondérée
-7 derniers jours"]
+        R1["30-99 cycles réels valides\nMoyenne mobile pondérée\n7 derniers jours (ML expérimental)"]
     end
 
     subgraph N2["NIVEAU 2 : Prophet + XGBoost"]
-        R2["500+ événements
-Séries temporelles
-+ Gradient Boosting"]
+        R2["100+ cycles réels valides\nSéries temporelles\n+ Gradient Boosting (production)"]
     end
 
     N0 -->|"Données accumulées"| N1
@@ -255,11 +249,15 @@ Séries temporelles
 
 ### Comment ça marche
 
-| Niveau | Données Requises | Modèle | Précision |
+| Niveau | Données Requises | Modèle | Confiance |
 |--------|-----------------|--------|-----------|
-| **0** | Aucune | Règles métier (seuils) | Basique |
-| **1** | 50+ événements | EWMA (moyenne mobile) | Moyenne |
-| **2** | 500+ événements | Prophet + XGBoost | Élevée |
+| **0** | < 30 cycles réels | Règles métier (seuils EtapeConfig) | `faible` |
+| **1** | 30–99 cycles réels | EWMA sur 7 jours (ML expérimental) | `moyenne` |
+| **2** | ≥ 100 cycles réels + modèle sauvegardé | Prophet + XGBoost (production) | `modele_valide` |
+
+> **Note** : "cycles réels valides" = cycles TERMINÉ, durée ≥ 10 min, est_anomalie=False, hors camions simulés.
+> Le champ `confiance` retourné par l'API est un label métier (`faible`/`moyenne`/`modele_valide`).
+> Il n'indique **pas** un intervalle statistique — c'est un forecast de durée totale, pas un ETA conditionné au poste actuel.
 
 ### Entraînement Automatique
 
@@ -748,14 +746,15 @@ pillow==10.3.0              # Manipulation d'images
 
 ## 🧪 Suite de Tests Automatisés & Qualité (QA)
 
-Le projet intègre une suite complète de **74 tests automatisés** (35 Backend `pytest` + 39 Frontend `Vitest`), garantissant la non-régression, la fiabilité de l'OCR, la conformité des règles métier et la stabilité des composants React.
+Le projet intègre une suite de **75 tests automatisés** (36 Backend `pytest` + 39 Frontend `Vitest`), dont des tests d'invariants de propriétés (idempotence, isolation temporelle des cycles, FSM, feature parity train/inférence).
 
 ```text
-Backend  : ======================== 35 passed in 4.52s (100%) ========================
-Frontend : Test Files  4 passed (4) | Tests  39 passed (39) in 2.11s (100%)
+Backend  : ======================== 36 passed in ~2s ========================
+  dont 7 tests d'invariants (test_invariants.py)
+Frontend : Test Files  4 passed (4) | Tests  39 passed (39)
 ```
 
-### 📚 1. Tests Backend (`pytest` — 35 tests) :
+### 📚 1. Tests Backend (`pytest` — 36 tests) :
 
 | Catégorie | Fichier Source | Description & Couverture |
 | :--- | :--- | :--- |
@@ -765,6 +764,7 @@ Frontend : Test Files  4 passed (4) | Tests  39 passed (39) in 2.11s (100%)
 | **⚡ Cache & Performance** | `tests/test_redis_cache.py` | Validation de la connexion Redis, écriture/lecture avec TTL, et invalidation automatique du cache lors de l'ingestion d'événements. |
 | **🚨 Métier & Algorithmes** | `tests/test_anomaly_detector.py` | Algorithmes d'analyse d'`AnomalyDetector` : détection du poste bloquant et calcul précis des dépassements de seuils. |
 | **🛡️ Sécurité & Cas Limites** | `tests/test_edge_cases_security.py` | Validation stricte des schémas Pydantic (HTTP 422), gestion des erreurs 404, robustesse face aux entrées corrompues et en-têtes CORS. |
+| **🏗️ Invariants Système** | `tests/test_invariants.py` | Tests de propriétés : idempotence `client_event_id`, isolation temporelle des cycles (borne supérieure sur événements), FSM `has_fsm_anomaly`, feature parity train=inférence, cohérence des seuils ML. |
 
 ### 📚 2. Tests Frontend (`Vitest` + React Testing Library — 39 tests) :
 
