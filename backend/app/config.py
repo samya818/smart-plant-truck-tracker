@@ -56,7 +56,6 @@ class Settings(BaseSettings):
             return f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         return "sqlite:///./lafarge_local.db"
 
-    @property
     def get_redis_url(self) -> str:
         """Génère dynamiquement l'URL de connexion Redis."""
         if self.redis_url:
