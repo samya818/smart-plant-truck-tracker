@@ -52,15 +52,19 @@ def list_active_events(db: Session = Depends(get_db)):
 @router.get("/finished-today")
 def list_finished_today(db: Session = Depends(get_db)):
     """
-    Retourne la liste des camions ayant terminé leur cycle aujourd'hui.
+    Retourne la liste des camions ayant terminé leur cycle aujourd'hui (fuseau Maroc UTC+1).
     """
-    depuis_aujourdhui = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    from datetime import timezone
+    tz_maroc = timezone(timedelta(hours=1))
+    now_maroc = datetime.now(tz=tz_maroc)
+    today_utc = now_maroc.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
+
     cycles = (
         db.query(Cycle)
         .options(joinedload(Cycle.truck))
         .filter(
             Cycle.status == TruckStatus.TERMINE,
-            Cycle.sortie_porte >= depuis_aujourdhui
+            Cycle.sortie_porte >= today_utc
         )
         .order_by(Cycle.sortie_porte.desc())
         .limit(20)

@@ -100,6 +100,7 @@ class EventIngestionService:
                 return existing_event
 
         truck = self._get_or_create_truck(plaque)
+        truck_id = truck.id
         now = horodatage or datetime.utcnow()
         if now.tzinfo is not None:
             now = now.replace(tzinfo=None)
@@ -112,14 +113,14 @@ class EventIngestionService:
         # ── 1. DÉDUPLICATION (camera + agent dans les 30s) ──────────────────
         recent = self.db.query(Event).filter(
             and_(
-                Event.truck_id == truck.id,
+                Event.truck_id == truck_id,
                 Event.poste == poste,
                 Event.type_event == type_event,
                 Event.horodatage >= now - timedelta(seconds=30)
             )
         ).first()
 
-        if recent:
+        if recent and (not client_event_id or recent.client_event_id == client_event_id or (source == "agent_mobile" and recent.source == "camera")):
             if source == "agent_mobile" and recent.source == "camera":
                 recent.source = "hybrid"
                 recent.agent_id = agent_id
@@ -133,18 +134,21 @@ class EventIngestionService:
 
         # ── 2. AUTO-FERMETURE cycle précédent si nouvelle entrée porte ──────
         if poste == PosteType.PORTE_USINE and type_event == "entree":
-            self._auto_close_stale_cycle(truck.id, new_entry_time=now)
+            self._auto_close_stale_cycle(truck_id, new_entry_time=now)
 
         # ── 3. VALIDATION FORMELLE AUTOMATE D'ÉTATS (FSM) ───────────────────
-        last_event = self.db.query(Event).filter(Event.truck_id == truck.id).order_by(Event.horodatage.desc()).first()
+        last_event = self.db.query(Event).filter(Event.truck_id == truck_id).order_by(Event.horodatage.desc()).first()
         last_step_key = f"{last_event.poste.value}:{last_event.type_event}" if last_event else None
         is_valid_transition, fsm_msg = CycleStateMachine.validate_transition(last_step_key, poste, type_event)
         if not is_valid_transition:
-            print(f"[FSM Audit] {plaque} : {fsm_msg}")
+            try:
+                print(f"[FSM Audit] {plaque} : {fsm_msg}")
+            except Exception:
+                pass
 
         # ── 4. INFÉRENCE SORTIE → ENTRÉE manquante ──────────────────────────
         if type_event == "sortie" and poste != PosteType.PORTE_USINE:
-            self._infer_missing_entry(truck.id, poste, now, source)
+            self._infer_missing_entry(truck_id, poste, now, source)
 
         # ── Seuil de confiance OCR fallback ( < 0.65 nécessite confirmation ) ──
         necesita_confirmacion = bool(confiance_ocr is not None and confiance_ocr < 0.65)
@@ -152,7 +156,7 @@ class EventIngestionService:
         # ── Création de l'événement ──────────────────────────────────────────
         event = Event(
             client_event_id=client_event_id,
-            truck_id=truck.id,
+            truck_id=truck_id,
             poste=poste,
             type_event=type_event,
             horodatage=now,                        # occurred_at
@@ -187,14 +191,17 @@ class EventIngestionService:
             if client_event_id:
                 existing = self.db.query(Event).filter(Event.client_event_id == client_event_id).first()
                 if existing:
-                    print(f"[Ingestion] ♻️ Collision concurrente interceptée avec succès : client_event_id={client_event_id}")
+                    try:
+                        print(f"[Ingestion] Collision concurrente interceptée avec succès : client_event_id={client_event_id}")
+                    except Exception:
+                        pass
                     return existing
             raise e
 
-        self._update_cycle(truck.id, poste, type_event, now)
+        self._update_cycle(truck_id, poste, type_event, now)
 
         if not is_valid_transition:
-            cycle = self.db.query(Cycle).filter(Cycle.truck_id == truck.id, Cycle.status == TruckStatus.EN_COURS).first()
+            cycle = self.db.query(Cycle).filter(Cycle.truck_id == truck_id, Cycle.status == TruckStatus.EN_COURS).first()
             if cycle:
                 cycle.has_fsm_anomaly = True
                 self.db.commit()

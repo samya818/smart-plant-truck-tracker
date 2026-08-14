@@ -65,7 +65,7 @@ interface FinishedTruck {
   est_anomalie: boolean;
 }
 
-function FinishedTrucksSection() {
+function FinishedTrucksSection({ refreshTrigger }: { refreshTrigger?: number }) {
   const [finished, setFinished] = useState<FinishedTruck[]>([]);
 
   useEffect(() => {
@@ -73,7 +73,7 @@ function FinishedTrucksSection() {
       .then(res => res.json())
       .then(data => setFinished(Array.isArray(data) ? data : []))
       .catch(() => {});
-  }, []);
+  }, [refreshTrigger]);
 
   if (finished.length === 0) return null;
 
@@ -327,8 +327,13 @@ export default function Dashboard() {
         <KPICard title="Alertes actives" value={stats ? stats.alertes_actives : (isLoading ? '...' : 0)} color="red" subtitle="Cycles en dépassement" />
       </div>
 
-      {stats?.poste_bloquant && <AlertBanner message={`⚠️ Poste bloquant détecté : ${stats.poste_bloquant}`} type="warning" />}
-      {stats?.top_cause_retard && <AlertBanner message={`🔥 Cause de retard la plus fréquente : ${stats.top_cause_retard}`} type="info" />}
+      {stats?.poste_bloquant && (
+        <AlertBanner
+          message={`📊 Poste le plus sollicité (moyenne 7j) : ${posteLabels[stats.poste_bloquant] || stats.poste_bloquant}`}
+          type="info"
+        />
+      )}
+      {stats?.top_cause_retard && <AlertBanner message={`🔥 Cause de retard la plus fréquente : ${stats.top_cause_retard}`} type="warning" />}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Liste des camions avec timeline complète du cycle */}
@@ -363,7 +368,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── Camions TERMINÉS aujourd'hui ── */}
-          <FinishedTrucksSection />
+          <FinishedTrucksSection refreshTrigger={events.length + (stats?.camions_aujourdhui || 0)} />
 
         </div>
 
