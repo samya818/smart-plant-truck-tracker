@@ -92,10 +92,9 @@ def get_stats(db: Session = Depends(get_db)):
     if cached:
         return cached
 
-    # Fuseau horaire Maroc (UTC+1)
-    tz_maroc = timezone(timedelta(hours=1))
-    now_maroc = datetime.now(tz=tz_maroc)
-    today_utc = now_maroc.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
+    # Début de la journée métier courante de l'usine (Maroc UTC+1)
+    from app.utils.timezone import get_start_of_business_day
+    today_utc = get_start_of_business_day()
     depuis_24h = datetime.utcnow() - timedelta(hours=24)
 
     # ── Camions en cours ──────────────────────────────────────────────────────

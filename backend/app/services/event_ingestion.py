@@ -198,7 +198,7 @@ class EventIngestionService:
                     return existing
             raise e
 
-        self._update_cycle(truck_id, poste, type_event, now)
+        self._update_cycle(event, truck_id, poste, type_event, now)
 
         if not is_valid_transition:
             cycle = self.db.query(Cycle).filter(Cycle.truck_id == truck_id, Cycle.status == TruckStatus.EN_COURS).first()
@@ -220,7 +220,8 @@ class EventIngestionService:
                 "type": "NEW_EVENT",
                 "poste": poste.value,
                 "type_event": type_event,
-                "immatriculation": plaque.upper()
+                "immatriculation": plaque.upper(),
+                "cycle_id": event.cycle_id
             }
             try:
                 loop = asyncio.get_running_loop()
@@ -413,10 +414,17 @@ class EventIngestionService:
             self.db.refresh(truck)
         return truck
 
-    def _update_cycle(self, truck_id: int, poste: PosteType, type_event: str, now: datetime):
+    def _update_cycle(self, event: Event, truck_id: int, poste: PosteType, type_event: str, now: datetime):
+        """
+        Associe l'événement à son cycle explicite (Event.cycle_id) et met à jour
+        les transitions d'état du cycle (création, étapes intermédiaires, fermeture).
+        """
         if poste == PosteType.PORTE_USINE and type_event == "entree":
             cycle = Cycle(truck_id=truck_id, entree_porte=now, status=TruckStatus.EN_COURS)
             self.db.add(cycle)
+            self.db.commit()
+            self.db.refresh(cycle)
+            event.cycle_id = cycle.id
             self.db.commit()
 
         elif poste == PosteType.PORTE_USINE and type_event == "sortie":
@@ -428,6 +436,8 @@ class EventIngestionService:
             if cycle:
                 cycle.sortie_porte = now
                 cycle.status = TruckStatus.TERMINE
+                event.cycle_id = cycle.id
+                self.db.commit()
                 self._recalculate_durations(cycle)
                 self.db.commit()
             else:
@@ -444,21 +454,26 @@ class EventIngestionService:
                 )
                 self.db.add(cycle)
                 self.db.commit()
+                self.db.refresh(cycle)
+                event.cycle_id = cycle.id
+                self.db.commit()
+        else:
+            # Événement intermédiaire (parking, bascule, ensachage) → associer au cycle EN_COURS
+            active_cycle = self.db.query(Cycle).filter(
+                Cycle.truck_id == truck_id,
+                Cycle.status == TruckStatus.EN_COURS
+            ).order_by(Cycle.entree_porte.desc()).first()
+            if active_cycle:
+                event.cycle_id = active_cycle.id
+                self.db.commit()
 
     def _recalculate_durations(self, cycle: Cycle):
         """
         Recalcule toutes les durées à partir des paires entree/sortie.
 
-        Isolation temporelle stricte : seuls les événements dans
-        [entree_porte, sortie_porte] sont considérés pour éviter que les
-        événements d'un cycle futur du même camion contaminent ce cycle.
-
-        Pour les cycles encore ouverts (sortie_porte=None), on utilise now()
-        comme borne supérieure — ce qui est conservateur mais jamais erroné.
-
-        Appariement séquentiel généralisé : parking, ensachage et bascule
-        utilisent tous la même logique entree→sortie pour supporter plusieurs
-        passages au même poste dans un seul cycle.
+        Isolation stricte :
+        1. Priorité aux événements directement liés par relation relationnelle : Event.cycle_id == cycle.id
+        2. Fallback sécurisé par intervalle temporel borné : [entree_porte, upper_bound]
         """
         def make_naive(dt):
             return dt.replace(tzinfo=None) if dt and dt.tzinfo else dt
@@ -473,14 +488,26 @@ class EventIngestionService:
         sortie_porte = make_naive(cycle.sortie_porte)
 
         # Borne supérieure : sortie_porte si disponible, sinon maintenant
-        # (isolation stricte : jamais d'événements hors de la fenêtre de ce cycle)
         upper_bound = sortie_porte if sortie_porte else datetime.utcnow()
 
-        events = self.db.query(Event).filter(
-            Event.truck_id == cycle.truck_id,
-            Event.horodatage >= entree_porte,
-            Event.horodatage <= upper_bound,   # ← CORRECTION CRITIQUE : borne supérieure
-        ).order_by(Event.horodatage).all()
+        # Requête avec relation cycle_id prioritaire ou fenêtre temporelle isolée
+        if cycle.id:
+            events = self.db.query(Event).filter(
+                (Event.cycle_id == cycle.id) |
+                (
+                    and_(
+                        Event.truck_id == cycle.truck_id,
+                        Event.horodatage >= entree_porte,
+                        Event.horodatage <= upper_bound
+                    )
+                )
+            ).order_by(Event.horodatage).all()
+        else:
+            events = self.db.query(Event).filter(
+                Event.truck_id == cycle.truck_id,
+                Event.horodatage >= entree_porte,
+                Event.horodatage <= upper_bound
+            ).order_by(Event.horodatage).all()
 
         def sequential_pairs(poste_type: PosteType) -> list[float]:
             """

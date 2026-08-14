@@ -165,8 +165,12 @@ export default function Dashboard() {
       const res = await fetch(`${API_BASE}/api/dashboard/etapes`);
       if (res.ok) {
         setEtapes(await res.json());
+      } else {
+        console.error(`[Dashboard] Échec chargement étapes: HTTP ${res.status}`);
       }
-    } catch { /* silencieux */ }
+    } catch (err) {
+      console.error('[Dashboard] Erreur réseau lors du chargement des étapes:', err);
+    }
   }, []);
 
   const loadAnomalies = useCallback(async () => {
@@ -174,13 +178,25 @@ export default function Dashboard() {
       const res = await fetch(`${API_BASE}/api/dashboard/anomalies`);
       if (res.ok) {
         setAnomalies(await res.json());
+      } else {
+        console.error(`[Dashboard] Échec chargement anomalies: HTTP ${res.status}`);
       }
-    } catch { /* silencieux */ }
+    } catch (err) {
+      console.error('[Dashboard] Erreur réseau lors du chargement des anomalies:', err);
+    }
   }, []);
 
   const runWatchdog = async () => {
-    await fetch(`${API_BASE}/api/dashboard/watchdog`, { method: 'POST' });
-    loadAnomalies();
+    try {
+      const res = await fetch(`${API_BASE}/api/dashboard/watchdog`, { method: 'POST' });
+      if (res.ok) {
+        await loadAnomalies();
+      } else {
+        console.error(`[Dashboard] Échec exécution watchdog: HTTP ${res.status}`);
+      }
+    } catch (err) {
+      console.error('[Dashboard] Erreur lors de l’exécution du watchdog:', err);
+    }
   };
 
   const saveEtape = async (id: number) => {

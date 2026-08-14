@@ -3,7 +3,7 @@
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/Frontend-React%2018-61DAFB?style=for-the-badge&logo=react)](https://react.dev)
-[![Tests Backend](https://img.shields.io/badge/Pytest-36%2F36%20Passed-success?style=for-the-badge&logo=pytest)](https://docs.pytest.org)
+[![Tests Backend](https://img.shields.io/badge/Pytest-38%2F38%20Passed-success?style=for-the-badge&logo=pytest)](https://docs.pytest.org)
 [![Tests Frontend](https://img.shields.io/badge/Vitest-39%2F39%20Passed-success?style=for-the-badge&logo=vitest)](https://vitest.dev)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791?style=for-the-badge&logo=postgresql)](https://postgresql.org)
 [![Redis](https://img.shields.io/badge/Cache-Redis%207-DC382D?style=for-the-badge&logo=redis)](https://redis.io)

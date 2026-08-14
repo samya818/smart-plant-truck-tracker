@@ -9,7 +9,7 @@ Ces tests vérifient des PROPRIÉTÉS (pas des fonctions) :
 - Cycle isolation : deux cycles successifs ne partagent pas leurs événements
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.models import Event, Truck, Cycle, PosteType, TruckStatus
 from app.services.event_ingestion import EventIngestionService
 from app.services.feature_engineering import (
@@ -272,3 +272,45 @@ class TestMLThresholdInvariant:
         assert horodatages == sorted(horodatages), (
             "Les événements doivent être ordonnés par horodatage (occurred_at)"
         )
+
+
+class TestEventCycleRelationInvariant:
+    """Invariant : chaque événement généré dans le cadre d'un cycle porte son cycle_id."""
+
+    def test_events_contain_explicit_cycle_id(self, db):
+        service = EventIngestionService(db)
+        plaque = "CYCLE-REL-01"
+        t0 = datetime(2026, 8, 1, 8, 0, 0)
+
+        # 1. Entrée porte
+        ev_in = service.ingest_event(plaque=plaque, poste=PosteType.PORTE_USINE, type_event="entree", source="camera", horodatage=t0)
+        # 2. Parking
+        ev_pk_in = service.ingest_event(plaque=plaque, poste=PosteType.PARKING, type_event="entree", source="camera", horodatage=t0 + timedelta(minutes=5))
+        ev_pk_out = service.ingest_event(plaque=plaque, poste=PosteType.PARKING, type_event="sortie", source="camera", horodatage=t0 + timedelta(minutes=25))
+        # 3. Sortie porte
+        ev_out = service.ingest_event(plaque=plaque, poste=PosteType.PORTE_USINE, type_event="sortie", source="camera", horodatage=t0 + timedelta(minutes=60))
+
+        truck = db.query(Truck).filter(Truck.immatriculation == plaque).first()
+        cycle = db.query(Cycle).filter(Cycle.truck_id == truck.id, Cycle.status == TruckStatus.TERMINE).first()
+        assert cycle is not None, "Le cycle doit être créé et terminé"
+
+        for ev in [ev_in, ev_pk_in, ev_pk_out, ev_out]:
+            db.refresh(ev)
+            assert ev.cycle_id == cycle.id, f"L'événement {ev.poste.value}:{ev.type_event} doit avoir cycle_id = {cycle.id}"
+
+
+class TestBusinessTimezoneInvariant:
+    """Invariant : le début de journée métier est unifié sur le fuseau Maroc UTC+1."""
+
+    def test_start_of_business_day_calculation(self):
+        from app.utils.timezone import get_start_of_business_day
+        # Cas 1 : 14 août 2026 à 00:30 (UTC+1) -> début de journée = 13 août 2026 à 23:00 UTC
+        dt_night = datetime(2026, 8, 14, 0, 30, 0, tzinfo=timezone(timedelta(hours=1)))
+        start_utc = get_start_of_business_day(dt_night)
+        assert start_utc == datetime(2026, 8, 13, 23, 0, 0)
+
+        # Cas 2 : 14 août 2026 à 14:00 (UTC+1) -> début de journée = 13 août 2026 à 23:00 UTC
+        dt_afternoon = datetime(2026, 8, 14, 14, 0, 0, tzinfo=timezone(timedelta(hours=1)))
+        start_afternoon = get_start_of_business_day(dt_afternoon)
+        assert start_afternoon == datetime(2026, 8, 13, 23, 0, 0)
+

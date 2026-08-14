@@ -22,7 +22,7 @@ def list_active_events(db: Session = Depends(get_db)):
     """
     since = datetime.utcnow() - timedelta(hours=24)
 
-    # Récupérer les truck_id qui ont un cycle EN_COURS
+    # Récupérer les cycles EN_COURS
     cycles_en_cours = db.query(Cycle).filter(
         Cycle.status == TruckStatus.EN_COURS,
         Cycle.entree_porte >= since
@@ -31,17 +31,24 @@ def list_active_events(db: Session = Depends(get_db)):
     if not cycles_en_cours:
         return []
 
-    # Construire les filtres pour chaque cycle actif (truck_id et horodatage >= entree_porte)
+    cycle_ids = [c.id for c in cycles_en_cours if c.id]
+    
+    # Construire les filtres pour chaque cycle actif (cycle_id direct OU fenêtre temporelle truck_id)
     from sqlalchemy import or_, and_
-    conditions = [
+    temporal_conditions = [
         and_(Event.truck_id == c.truck_id, Event.horodatage >= (c.entree_porte.replace(tzinfo=None) if c.entree_porte.tzinfo else c.entree_porte))
         for c in cycles_en_cours
     ]
+    
+    if cycle_ids:
+        filter_expr = or_(Event.cycle_id.in_(cycle_ids), *temporal_conditions)
+    else:
+        filter_expr = or_(*temporal_conditions)
 
     events = (
         db.query(Event)
         .options(joinedload(Event.truck))
-        .filter(or_(*conditions))
+        .filter(filter_expr)
         .order_by(Event.horodatage.desc())
         .all()
     )
@@ -52,12 +59,10 @@ def list_active_events(db: Session = Depends(get_db)):
 @router.get("/finished-today")
 def list_finished_today(db: Session = Depends(get_db)):
     """
-    Retourne la liste des camions ayant terminé leur cycle aujourd'hui (fuseau Maroc UTC+1).
+    Retourne la liste des camions ayant terminé leur cycle aujourd'hui (journée métier Maroc UTC+1).
     """
-    from datetime import timezone
-    tz_maroc = timezone(timedelta(hours=1))
-    now_maroc = datetime.now(tz=tz_maroc)
-    today_utc = now_maroc.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc).replace(tzinfo=None)
+    from app.utils.timezone import get_start_of_business_day
+    today_utc = get_start_of_business_day()
 
     cycles = (
         db.query(Cycle)

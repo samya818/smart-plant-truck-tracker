@@ -99,6 +99,7 @@ class EventRead(EventBase):
     gps_lat: Optional[float] = None
     gps_lon: Optional[float] = None
     gps_accuracy_m: Optional[float] = None
+    cycle_id: Optional[int] = None
     truck: Optional[TruckRead] = None
     class Config:
         from_attributes = True

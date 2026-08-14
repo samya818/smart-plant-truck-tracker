@@ -127,6 +127,10 @@ class Event(Base):
     gps_lon = Column(Float, nullable=True)
     gps_accuracy_m = Column(Float, nullable=True)
 
+    # --- LIAISON EXPLICITE AU CYCLE (Isolation stricte et intégrité relationnelle) ---
+    cycle_id = Column(Integer, ForeignKey("cycles.id"), nullable=True, index=True)
+    cycle = relationship("Cycle", back_populates="events")
+
     truck = relationship("Truck", back_populates="events")
 
 
@@ -151,6 +155,7 @@ class Cycle(Base):
     auto_closed     = Column(Boolean, default=False)   # fermé automatiquement par le système
     gap_applique    = Column(Float,   nullable=True)    # gap route appliqué (minutes)
     truck = relationship("Truck", back_populates="cycles")
+    events = relationship("Event", back_populates="cycle", order_by="Event.horodatage")
 
     @property
     def immatriculation(self) -> str:
