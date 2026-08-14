@@ -49,6 +49,7 @@ export interface DashboardStats {
   camions_en_cours: number;
   camions_aujourdhui: number;
   temps_moyen_cycle: number;
+  poste_plus_contraignant?: string;
   poste_bloquant?: string;
   alertes_actives: number;
   top_cause_retard?: string;

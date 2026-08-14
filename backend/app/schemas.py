@@ -124,7 +124,8 @@ class DashboardStats(BaseModel):
     camions_en_cours: int
     camions_aujourdhui: int
     temps_moyen_cycle: float
-    poste_bloquant: Optional[str] = None
+    poste_plus_contraignant: Optional[str] = None
+    poste_bloquant: Optional[str] = None  # Alias rétro-compatible
     alertes_actives: int
     top_cause_retard: Optional[str] = None
 

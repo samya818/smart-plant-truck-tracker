@@ -136,9 +136,10 @@ def get_stats(db: Session = Depends(get_db)):
         Cycle.entree_porte <= seuil_alerte
     ).scalar() or 0
 
-    # ── Poste bloquant & cause de retard ──────────────────────────────────────
+    # ── Poste le plus contraignant (moyenne 7j) & cause de retard ─────────────
     detector = AnomalyDetector(db)
-    bloquant_info = detector.get_poste_bloquant()
+    bloquant_info = detector.get_poste_contraignant_historique()
+    poste_contraignant = bloquant_info.get("poste_plus_contraignant")
 
     top_cause = db.query(DelayCause).filter(
         DelayCause.is_active == True
@@ -149,7 +150,8 @@ def get_stats(db: Session = Depends(get_db)):
         camions_en_cours=camions_en_cours,
         camions_aujourdhui=camions_aujourdhui,
         temps_moyen_cycle=round(temps_moyen, 1),
-        poste_bloquant=bloquant_info.get("poste_bloquant"),
+        poste_plus_contraignant=poste_contraignant,
+        poste_bloquant=poste_contraignant,
         alertes_actives=alertes,
         top_cause_retard=top_cause_name
     )

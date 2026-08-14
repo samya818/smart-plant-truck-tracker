@@ -13,11 +13,16 @@ def test_anomaly_detector_initialization(db):
 
 
 def test_anomaly_detector_poste_bloquant(db):
-    """Vérifie que l'algorithme retourne une analyse sur les postes bloquants."""
+    """Vérifie que l'algorithme retourne l'analyse statistique sur le poste historiquement le plus contraignant."""
     detector = AnomalyDetector(db)
-    bloquant_info = detector.get_poste_bloquant()
-    assert isinstance(bloquant_info, dict)
-    assert "poste_bloquant" in bloquant_info
+    info = detector.get_poste_contraignant_historique()
+    assert isinstance(info, dict)
+    assert "poste_plus_contraignant" in info
+    assert "type_indicateur" in info
+    assert info["type_indicateur"] == "moyenne_historique_7j"
+    # Alias de compatibilité
+    alias_info = detector.get_poste_bloquant()
+    assert alias_info["poste_bloquant"] == info["poste_plus_contraignant"]
 
 
 def test_anomaly_detector_calcul_retard():

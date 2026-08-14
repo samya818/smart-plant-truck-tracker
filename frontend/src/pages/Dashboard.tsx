@@ -343,9 +343,9 @@ export default function Dashboard() {
         <KPICard title="Alertes actives" value={stats ? stats.alertes_actives : (isLoading ? '...' : 0)} color="red" subtitle="Cycles en dépassement" />
       </div>
 
-      {stats?.poste_bloquant && (
+      {(stats?.poste_plus_contraignant || stats?.poste_bloquant) && (
         <AlertBanner
-          message={`📊 Poste le plus sollicité (moyenne 7j) : ${posteLabels[stats.poste_bloquant] || stats.poste_bloquant}`}
+          message={`📊 Poste historiquement le plus contraignant (moyenne 7j) : ${posteLabels[stats.poste_plus_contraignant || stats.poste_bloquant || ''] || (stats.poste_plus_contraignant || stats.poste_bloquant)}`}
           type="info"
         />
       )}

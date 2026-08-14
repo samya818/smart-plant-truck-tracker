@@ -76,8 +76,11 @@ class AnomalyDetector:
                        if est_anomalie else "Normal — pas assez d'historique")
         }
 
-    def get_poste_bloquant(self) -> dict:
-        """Identifie le poste avec la durée moyenne la plus élevée."""
+    def get_poste_contraignant_historique(self) -> dict:
+        """
+        Identifie le poste présentant la durée moyenne historique la plus élevée sur les 7 derniers jours.
+        Indicateur statistique glissant (analyse de charge moyenne, pas de blocage instantané).
+        """
         depuis = datetime.utcnow() - timedelta(days=7)
         cycles = self.db.query(Cycle).filter(
             Cycle.entree_porte >= depuis,
@@ -85,7 +88,12 @@ class AnomalyDetector:
         ).all()
 
         if not cycles:
-            return {"poste_bloquant": None, "note": "Pas assez de données"}
+            return {
+                "poste_plus_contraignant": None,
+                "poste_bloquant": None,
+                "type_indicateur": "moyenne_historique_7j",
+                "note": "Pas assez de données"
+            }
 
         import pandas as pd
         df = pd.DataFrame([{
@@ -95,10 +103,15 @@ class AnomalyDetector:
         } for c in cycles])
 
         moyennes = df.mean().to_dict()
-        bloquant = max(moyennes, key=moyennes.get)
+        plus_contraignant = max(moyennes, key=moyennes.get)
 
         return {
-            "poste_bloquant": bloquant,
-            "duree_moyenne_min": round(moyennes[bloquant], 1),
+            "poste_plus_contraignant": plus_contraignant,
+            "poste_bloquant": plus_contraignant,  # Alias de rétro-compatibilité
+            "type_indicateur": "moyenne_historique_7j",
+            "duree_moyenne_min": round(moyennes[plus_contraignant], 1),
             "details": {k: round(v, 1) for k, v in moyennes.items()}
         }
+
+    # Alias rétro-compatible
+    get_poste_bloquant = get_poste_contraignant_historique
