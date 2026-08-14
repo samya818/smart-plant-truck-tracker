@@ -180,41 +180,69 @@ multipart/form-data"| REST
 ```mermaid
 sequenceDiagram
     participant T as 🚛 Camion
-    participant G as 🚪 Caméra Porte / Agent
-    participant API as ⚡ FastAPI
+    participant Cap as 📷 Caméra / 📱 Agent
+    participant Svc as 📥 Ingestion & FSM
     participant DB as 🐘 PostgreSQL
     participant WS as 🔌 WebSocket
-    participant S as 🖥️ Superviseur
+    participant UI as 🖥️ Dashboard Superviseur
 
-    T->>G: Arrive à la porte usine
-    G->>API: POST /api/mobile/events plaque + poste=porte_usine + type=entree
-    API->>DB: Créer Événement + Ouvrir nouveau Cycle
-    API->>WS: Diffuser mise à jour statut camion
-    WS->>S: Mise à jour dashboard en direct (sans rafraîchir)
+    Note over T,UI: ① ENTRÉE USINE — Ouverture du Cycle
+    T->>Cap: Détection plaque (ex: 77889-A-26)
+    Cap->>Svc: Ingestion (porte_usine:entree + client_event_id)
+    Svc->>DB: Créer Cycle (EN_COURS) + Event (cycle_id = Cycle.id)
+    Svc->>WS: Broadcast NEW_EVENT
+    WS->>UI: Apparition immédiate dans "Camions en cours"
 
-    T->>G: Arrive à la Bascule (Tare)
-    G->>API: POST event poste=bascule type=entree
-    API->>DB: Mettre à jour Cycle.duree_parking
+    Note over T,UI: ② ÉTAPES INTERMÉDIAIRES — Parcours & Durées
+    T->>Cap: Entrée Parking (parking:entree)
+    Cap->>Svc: Ingestion Event (associé à cycle_id)
+    T->>Cap: Sortie Parking (parking:sortie)
+    Cap->>Svc: Ingestion Event → Audit FSM valide
+    
+    T->>Cap: 1er passage Bascule (bascule:entree / sortie - Tare)
+    Cap->>Svc: Ingestion Event (cycle_id)
+    
+    T->>Cap: Chargement Ciment (ensachage:entree / sortie)
+    Cap->>Svc: Ingestion Event (cycle_id)
 
-    T->>G: Arrive à l'Ensachage
-    G->>API: POST event poste=ensachage type=entree
-    API->>DB: Mettre à jour Cycle.duree_bascule_tare
+    T->>Cap: 2ème passage Bascule (bascule:entree / sortie - Brut)
+    Cap->>Svc: Ingestion Event (cycle_id)
 
-    Note over T,S: Le chargement dure jusqu'à 45 min (seuil)
+    Note over T,UI: ③ SORTIE USINE — Clôture & Recalcul Isolé
+    T->>Cap: Sortie usine (porte_usine:sortie)
+    Cap->>Svc: Ingestion (porte_usine:sortie)
+    Svc->>DB: Recalcul durées (isolation par cycle_id) + Clôture Cycle (TERMINE)
+    Svc->>WS: Broadcast FIN_CYCLE
+    WS->>UI: Déplacement vers "Camions sortis (aujourd'hui)"
+```
 
-    T->>G: Sort de l'Ensachage
-    G->>API: POST event poste=ensachage type=sortie
-    API->>DB: Mettre à jour Cycle.duree_ensachage
+---
 
-    T->>G: Repasse à la Bascule (Brut)
-    G->>API: POST event poste=bascule type=entree
-    API->>DB: Mettre à jour Cycle.duree_bascule_brut
+## 🔀 Automate à États Finis (FSM Métier)
 
-    T->>G: Sort de l'usine
-    G->>API: POST event poste=porte_usine type=sortie
-    API->>DB: Fermer Cycle — status=TERMINE duree_total=X min
-    API->>WS: Diffuser fin de cycle
-    WS->>S: Dashboard retire le camion de la liste active
+Le cycle de vie de chaque camion est validé en continu par une **Machine à États Finis explicite** (`CycleStateMachine`) garantissant la conformité du parcours :
+
+```mermaid
+stateDiagram-v2
+    [*] --> HORS_USINE
+    HORS_USINE --> PORTE_ENTREE : porte_usine:entree
+    PORTE_ENTREE --> PARKING_ENTREE : parking:entree
+    PORTE_ENTREE --> BASCULE_TARE_IN : bascule:entree (bypass parking)
+    PARKING_ENTREE --> PARKING_SORTIE : parking:sortie
+    PARKING_SORTIE --> BASCULE_TARE_IN : bascule:entree
+    BASCULE_TARE_IN --> BASCULE_TARE_OUT : bascule:sortie
+    BASCULE_TARE_OUT --> ENSACHAGE_IN : ensachage:entree
+    ENSACHAGE_IN --> ENSACHAGE_OUT : ensachage:sortie
+    ENSACHAGE_OUT --> BASCULE_BRUT_IN : bascule:entree (pesage plein)
+    BASCULE_BRUT_IN --> BASCULE_BRUT_OUT : bascule:sortie
+    BASCULE_BRUT_OUT --> PORTE_SORTIE : porte_usine:sortie
+    PORTE_SORTIE --> HORS_USINE : Cycle TERMINE
+
+    note right of PORTE_SORTIE
+        En cas de transition anormale ou étape sautée,
+        l'événement est accepté avec flag has_fsm_anomaly=True
+        (Résilience industrielle : la donnée n'est jamais perdue).
+    end note
 ```
 
 ---
@@ -277,7 +305,7 @@ graph LR
 
 ---
 
-## 🗃️ Schéma de la Base de Données
+## 🗃️ Schéma de la Base de Données (ERD)
 
 ```mermaid
 erDiagram
@@ -298,18 +326,25 @@ erDiagram
 
     EVENT {
         int id PK
+        string client_event_id UK "Idempotence offline"
         int truck_id FK
+        int cycle_id FK "Liaison explicite cycle"
         enum poste
         string type_event
-        datetime horodatage
-        string source
+        datetime horodatage "occurred_at"
+        datetime received_at "received_at"
+        string sync_status "realtime | synced_offline"
+        string source "camera | agent_mobile | hybrid"
         string agent_id
         int delay_cause_id FK
         int minutes_retard
         float gps_lat
         float gps_lon
+        float gps_accuracy_m
         float confiance_ocr
         bool necesita_confirmacion
+        bool is_inferred
+        bool has_fsm_anomaly
         string image_path
     }
 
@@ -323,8 +358,11 @@ erDiagram
         float duree_ensachage
         float duree_bascule_brut
         float duree_total
-        enum status
+        enum status "EN_COURS | TERMINE | EXPIRE"
         bool est_anomalie
+        bool has_fsm_anomaly
+        bool auto_closed
+        float gap_applique
     }
 
     DELAY_CAUSE {
@@ -337,10 +375,10 @@ erDiagram
 
     POSTE_CONFIG {
         enum poste PK
-        enum capture_mode
+        enum capture_mode "CAMERA | AGENT | HYBRID"
         string camera_url
-        bool camera_active
-        int seuil_attente_max
+        string agent_pin
+        bool is_active
     }
 
     ETAPE_CONFIG {
@@ -358,7 +396,8 @@ erDiagram
 
     TRANSPORTEUR ||--o{ TRUCK : "possède"
     TRUCK ||--o{ EVENT : "génère"
-    TRUCK ||--o{ CYCLE : "complète"
+    TRUCK ||--o{ CYCLE : "parcourt"
+    CYCLE ||--o{ EVENT : "contient"
     EVENT }o--|| DELAY_CAUSE : "lié à"
 ```
 
@@ -433,7 +472,31 @@ docker compose up -d --build
 | 📊 **Statistiques & Analytiques** | `http://<IP_SERVEUR>/statistiques` | Rapports, conformité par zone & transporteurs |
 | 📱 **Agent Mobile (PWA)** | `http://<IP_SERVEUR>/mobile` | Interface de saisie terrain responsive |
 | 🔧 **Documentation API Interactive** | `http://<IP_SERVEUR>:8000/docs` | Swagger UI OpenAPI 3.0 |
-| 🗄️ **Administration Base de Données** | `http://<IP_SERVEUR>:8080` | Adminer PostgreSQL |
+---
+
+## 🛡️ Invariants Métier & Robustesse Industrielle
+
+Le système implémente **7 invariants formels** testés et garantis en continu (`backend/tests/test_invariants.py`) :
+
+1. **Idempotence Stricte Client (`client_event_id`)** :
+   - Tout événement généré hors-ligne par la PWA mobile porte un UUID unique.
+   - En cas de reconnexion réseau et re-jeu multiple (retry du Service Worker), la base garantit zéro duplication d'événement ou de cycle.
+2. **Liaison Explicite & Isolation des Cycles (`Event.cycle_id`)** :
+   - Chaque événement est directement associé par clé étrangère à son cycle.
+   - Le recalcul des durées d'un cycle ne peut jamais être contaminé par les événements des cycles passés ou futurs du même camion.
+3. **Automate à États Finis Résilient (FSM Audit)** :
+   - Toute transition anormale (ex: entrée ensachage avant bascule) est détectée et marquée `has_fsm_anomaly=True`.
+   - L'événement est accepté pour ne jamais perdre la réalité terrain tout en alertant le superviseur.
+4. **Unification de la Journée Métier (Timezone Unique)** :
+   - La référence temporelle unique est le fuseau horaire de l'usine (**Maroc UTC+1** via `app.utils.timezone`).
+   - Fin des incohérences de changement de date entre minuit local et minuit UTC.
+5. **Feature Parity Train / Inférence (13 Features XGBoost)** :
+   - Exactitude mathématique entre le vecteur de caractéristiques calculé lors de l'entraînement et celui lors de l'inférence temps réel.
+6. **Ordonnancement Temporel des Événements (`occurred_at` vs `received_at`)** :
+   - Distinction stricte entre l'instant physique de détection sur le terrain (`horodatage`) et l'instant d'ingestion serveur (`received_at`).
+7. **MLOps Champion vs Challenger Relatif** :
+   - Évaluation sur ensemble de test séparé temporellement (70% train / 15% validation / 15% test).
+   - Seuil de réentraînement à 30 cycles réels valides, seuil de mise en production à 100 cycles.
 
 ---
 
