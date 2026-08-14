@@ -287,7 +287,7 @@ blockquote {
     <li class="level-2"><span>3.5 Modelisation des donnees et cycle de vie camion</span></li>
     <li class="level-2"><span>3.6 Diagramme de sequence</span></li>
     <li class="level-2"><span>3.7 Diagramme de deploiement</span></li>
-    <li class="level-2"><span>3.8 Le pipeline ML Zero-to-Hero</span></li>
+    <li class="level-2"><span>3.8 Pipeline adaptatif a niveaux de maturite des donnees</span></li>
     <li class="level-1"><span>Chapitre 4 &mdash; Implementation, Deploiement et Resultats</span></li>
     <li class="level-2"><span>4.1 Systeme de capture bi-mode</span></li>
     <li class="level-2"><span>4.2 Dashboard superviseur et interface mobile</span></li>
@@ -356,7 +356,7 @@ blockquote {
   </div>
   <p>Le systeme repose sur une architecture logicielle moderne et modulaire, combinant un <strong>backend FastAPI</strong> haute performance, une <strong>base de donnees PostgreSQL</strong> relationnelle, et un mecanisme de WebSocket en memoire pour la diffusion temps reel. Le <strong>frontend React</strong> est responsive et deploye sous forme de Progressive Web App (PWA). Le coeur analytique integre un pipeline de <strong>Machine Learning evolutif</strong> (Prophet + XGBoost) s'adaptant automatiquement au volume de donnees accumule.</p>
   <p>La capture des evenements s'effectue selon un paradigme <strong>bi-mode</strong> innovant : une camera OCR alimentee par YOLOv8 lit automatiquement les plaques d'immatriculation, tandis qu'un agent de terrain peut valider ou saisir manuellement les donnees via une interface mobile optimisee. Cette redondance garantit la fiabilite du systeme meme dans des conditions industrielles difficiles (poussiere, eclairage variable).</p>
-  <p>Les resultats obtenus demontrent la faisabilite technique et la valeur metier de l'approche, avec une visibilite temps reel sur les cycles camions, une detection instantanee des depassements de seuil, et des predictions de temps de sejour permettant une anticipation proactive des retards.</p>
+  <p>Les resultats obtenus demontrent la <strong>faisabilite technique du prototype</strong> et illustrent son <strong>potentiel de valeur operationnelle</strong> : visibilite temps reel sur les cycles camions, detection instantanee des depassements de seuil, et predictions de temps de sejour permettant une anticipation proactive des retards. La demonstration de la valeur metier effective sur le terrain reste conditionnee a un pilote en conditions reelles.</p>
   <div class="keywords"><strong>Mots-cles :</strong> Logistique industrielle, Intelligence Artificielle, Vision par ordinateur, OCR, Prediction temporelle, FastAPI, React, WebSocket, Docker, Industrie 4.0, Tracabilite, Optimisation des flux.</div>
 </div>
 
@@ -467,7 +467,7 @@ blockquote {
 
   <h2>2.4 Le Machine Learning pour la prediction temporelle</h2>
   <p>La prediction des temps de cycle camion est un probleme de <strong>serie temporelle</strong> : on cherche a estimer, a l'instant <em>t</em>, la duree totale d'un cycle connaissant les durees des etapes deja accomplies et les conditions contextuelles (heure de la journee, jour de la semaine, affluence historique).</p>
-  <p>Le systeme Smart-Truck-Tracker implemente une architecture <strong>&laquo; Zero-to-Hero &raquo; a trois niveaux</strong> :</p>
+  <p>Le systeme Smart-Truck-Tracker implemente une <strong>strategie progressive de prediction selon la disponibilite des donnees</strong> (appelee en interne &laquo;&nbsp;Zero-to-Hero&nbsp;&raquo;), organisee en trois niveaux :</p>
   <ul>
     <li><strong>Niveau 0 (Regles metier) :</strong> pour moins de 50 evenements historiques, le systeme utilise des seuils configurables par le superviseur (ex: 30 min max pour le parking).</li>
     <li><strong>Niveau 1 (EWMA) :</strong> entre 50 et 499 evenements, une moyenne mobile ponderee exponentiellement sur les 7 derniers jours fournit une estimation adaptative.</li>
@@ -613,7 +613,7 @@ blockquote {
   <div class="figure-caption">Figure 3.1 &mdash; Diagramme de cas d'utilisation du systeme Smart-Truck-Tracker</div>
 
   <h2>3.3 Architecture logicielle modulaire</h2>
-  <p>Le systeme Smart-Truck-Tracker repose sur une architecture en <strong>quatre couches</strong>, conforme aux principes de separation des responsabilites (SoC) et de scalabilite horizontale. Chaque couche communique avec ses voisines uniquement via des interfaces bien definies, garantissant le remplacement ou la mise a l'echelle independante de chaque composant.</p>
+  <p>Le systeme Smart-Truck-Tracker repose sur une architecture en <strong>quatre couches</strong>, conforme aux principes de separation des responsabilites (SoC). Chaque couche communique avec ses voisines uniquement via des interfaces bien definies, facilitant l'evolution independante de chaque composant. La scalabilite horizontale complete reste toutefois conditionnee a l'externalisation de certains etats actuellement conserves en memoire (notamment le broker WebSocket intra-instance, qui necessite un mecanisme Redis Pub/Sub pour un deploiement multi-instance).</p>
 
   <div class="svg-container">
     <svg viewBox="0 0 700 420" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
@@ -684,7 +684,7 @@ blockquote {
   <p>La communication entre les scripts camera et le tableau de bord de supervision repose exclusivement sur des <strong>fichiers d'echange structures</strong> (JSON pour l'etat temps reel, CSV pour l'historique), volontairement simples mais concus pour etre aisement substituables par une base de donnees plus robuste sans modification des modules de perception.</p>
 
   <h2>3.4 Diagramme de classes</h2>
-  <p>Le modele de donnees relationnel objet du systeme est articule autour de cinq entites principales, conformement au pattern <strong>Domain-Driven Design (DDD)</strong>. La classe <code>Cycle</code> constitue l'aggregate root du domaine logistique.</p>
+  <p>Le modele de donnees relationnel objet du systeme est articule autour de cinq entites principales. La classe <code>Cycle</code> joue le role d'entite centrale du domaine logistique : chaque <code>Event</code> est rattache a son <code>Cycle</code> via la cle etrangere explicite <code>events.cycle_id</code> (ajoutee lors de ce projet), garantissant l'isolation temporelle de chaque passage. Le diagramme ci-dessous reflète l'etat reel du modele implementé.</p>
 
   <div class="svg-container">
     <svg viewBox="0 0 900 520" xmlns="http://www.w3.org/2000/svg" style="max-width:100%;height:auto;">
@@ -920,14 +920,14 @@ blockquote {
   </div>
   <div class="figure-caption">Figure 3.5 &mdash; Diagramme de deploiement physique du systeme</div>
 
-  <h2>3.7 Le pipeline ML &laquo; Zero-to-Hero &raquo;</h2>
+  <h2>3.7 Pipeline adaptatif a niveaux de maturite des donnees</h2>
   <p>L'un des apports techniques majeurs de ce stage est la conception d'un pipeline d'apprentissage automatique <strong>auto-adaptatif</strong>, capable de fonctionner des le premier jour sans donnees historiques et de gagner en precision au fur et a mesure de l'accumulation des cycles.</p>
 
   <table>
     <tr><th>Niveau</th><th>Donnees requises</th><th>Modele</th><th>Precision</th><th>Latence</th></tr>
     <tr><td><strong>0</strong></td><td>Aucune</td><td>Regles metier (seuils configurables)</td><td>Basique</td><td>Instantanee</td></tr>
     <tr><td><strong>1</strong></td><td>50+ evenements</td><td>EWMA (moyenne mobile ponderee)</td><td>Moyenne</td><td>&lt; 10 ms</td></tr>
-    <tr><td><strong>2</strong></td><td>500+ evenements</td><td>Prophet + XGBoost</td><td>Elevée (MAPE ~12%)</td><td>&lt; 100 ms</td></tr>
+    <tr><td><strong>2</strong></td><td>500+ evenements</td><td>Prophet + XGBoost</td><td>Elevee (MAPE 13.5% sur donnees synthetiques)</td><td>&lt; 100 ms</td></tr>
   </table>
 
   <p>L'entrainement automatique s'execute toutes les 6 heures via un service dedie (<code>auto_train.py</code>). <strong>Prophet</strong> capture la saisonnalite journaliere (pics a 8h et 17h) et hebdomadaire (affluence moindre le week-end). <strong>XGBoost</strong> est teste en parallele ; s'il bat Prophet de plus de 5% de MAPE, il devient le modele de production. Les modeles sont persistes dans un volume Docker partage et charges a chaud sans interruption de service.</p>
@@ -966,12 +966,12 @@ blockquote {
 
   <div class="warning-box">
     <strong>Enseignement industriel cle &mdash; Justification du mode Hybride :</strong>
-    <p style="margin-top:8px;">Les resultats du banc d'essai sur photos reelles de poids lourds demontrent que dans un environnement cimentier (poussiere de ciment, variations d'eclairage, angles de prise de vue obliques), <strong>aucune camera 100% automatique ne peut garantir une tracabilite sans faille</strong>. Sur 4 images de camions industriels reels, le modele YOLOv8n n'a detecte que 50% des vehicules correctement cadres, et l'OCR n'a pu lire qu'une seule plaque.</p>
+    <p style="margin-top:8px;">Les resultats du banc d'essai sur 4 photos reelles de poids lourds revelent que, dans les conditions testees (poussiere de ciment, variations d'eclairage, angles obliques), le pipeline n'a pas atteint une robustesse suffisante pour justifier une automatisation sans supervision : le modele YOLOv8n n'a detecte que 2 vehicules sur 4 (50%), et l'OCR n'a pu lire qu'une seule plaque. <em>Ce resultat, bien que negatif, constitue un apport experimental legitime : il demontre la necessite d'un mecanisme de validation humaine en complement de l'OCR.</em></p>
     <p>C'est precis&eacute;ment ce constat &mdash; valide par des tests objectifs &mdash; qui justifie et legitime l'architecture <strong>Bi-Mode Hybride</strong> implementee dans ce projet :</p>
     <ul style="margin-top:6px;">
       <li>La camera OCR traite automatiquement les cas favorables (bon cadrage, eclairage stable).</li>
       <li>Des que la confiance OCR est insuffisante (&lt; 65%), le flag <code>necesita_confirmacion</code> est leve et une notification est transmise a l'<strong>Agent Mobile (PWA)</strong> pour confirmation humaine immediate.</li>
-      <li><strong>Resultat : zero camion perdu, 100% de fiabilite logistique garantie.</strong></li>
+      <li><strong>Objectif de robustesse : reduire le risque de perte d'evenements en transferant les observations a faible confiance vers une validation humaine. Ce mecanisme constitue une tolerance aux defaillances du module OCR, et non une garantie formelle de fiabilite a 100&nbsp;%.</strong></li>
     </ul>
   </div>
 
@@ -1074,12 +1074,12 @@ necesita_confirmacion = bool(confiance_ocr is not None and confiance_ocr &lt; 0.
       <li><strong>Split Temporel 3 Voies :</strong> 70% Train chronologique / 15% Validation (Early Stopping XGBoost) / 15% Test Independant verrouille sans melange (*No Shuffle*).</li>
       <li><strong>Zero Feature Mismatch :</strong> Ingestion de 13 features causales identiques et imputation basee uniquement sur la mediane du train set.</li>
       <li><strong>Calcul Formel de l'ETA Restant :</strong> $\text{ETA}_{\text{restant}} = \max\left(5.0, \; \hat{y}_{\text{total}} - T_{\text{ecoule}}\right)$, adapte dynamiquement a l'historique du camion.</li>
-      <li><strong>Performances validees sur Test :</strong> Prophet atteint une <strong>MAE de 11.8 min</strong>, <strong>RMSE de 14.9 min</strong> et un <strong>MAPE de 13.5%</strong>, surpassant significativement la baseline moyenne (18.4 min MAE).</li>
+      <li><strong>Performances sur jeu de test synthetique :</strong> Prophet atteint une <strong>MAE de 11.8 min</strong>, <strong>RMSE de 14.9 min</strong> et un <strong>MAPE de 13.5%</strong>, surpassant la baseline moyenne (18.4 min MAE). <em>Note : ces metriques caracterisent uniquement les performances obtenues sur le jeu de donnees synthetique utilise pour valider le pipeline. Elles ne constituent pas une estimation de la performance attendue sur les donnees operationnelles reelles de l'usine, qui necessitent 3 a 6 mois d'historique reel pour etre evaluees.</em></li>
     </ul>
   </div>
 
   <h2>4.4 Suite de tests automatises et assurance qualite (QA)</h2>
-  <p>Pour garantir la robustesse industrielle de la plateforme, la non-regression du code et la conformite des regles metier, une suite complete de <strong>74 tests automatises</strong> a ete developpee et validee : <strong>35 tests backend (Pytest)</strong> et <strong>39 tests frontend (Vitest + React Testing Library)</strong>, atteignant 100% de taux de succes.</p>
+  <p>Pour garantir la non-regression du code et la conformite des regles metier, une suite complete de <strong>74 tests automatises</strong> a ete developpee : <strong>35 tests backend (Pytest)</strong> et <strong>39 tests frontend (Vitest + React Testing Library)</strong>. Les 74/74 tests sont passants dans l'environnement de validation. <em>Ces tests ne remplacent pas des tests de charge ou des tests en conditions operationnelles reelles, qui restent a effectuer lors du pilote.</em></p>
 
   <h3>4.4.1 Tests Backend (Pytest &mdash; 35 tests valides)</h3>
   <table>
@@ -1131,6 +1131,10 @@ npm test
   <h1 class="chapter-title">Chapitre 5 &mdash; Guide d'Installation et d'Utilisation</h1>
 
   <h2>5.1 Prerequis techniques</h2>
+  <div style="margin-bottom:16px; padding:10px 16px; background:#f8fafc; border-left:4px solid #3b82f6; border-radius:4px; font-size:9.5pt;">
+    <strong>Version evaluee dans ce rapport :</strong> commit <code>cf93c75</code> (tag <code>v1.0.0-report</code>) &mdash; branche <code>main</code> du depot <code>samya818/smart-plant-truck-tracker</code>.<br>
+    <em>Tout ecart entre les chiffres presentes dans ce rapport et une version ulterieure du depot s'explique par l'evolution du projet apres la periode de stage.</em>
+  </div>
   <ul>
     <li>Docker Desktop installe et lance (Windows / macOS / Linux), version 4.20+ recommandee.</li>
     <li>Git installe (version 2.40+).</li>
@@ -1139,8 +1143,8 @@ npm test
     <li>Une connexion Internet pour le telechargement initial des images de base.</li>
   </ul>
 
-  <h2>5.2 Deploiement industriel automatise (Ready-to-Deploy)</h2>
-  <p>L'un des atouts majeurs de la plateforme Smart-Truck-Tracker reside dans son caractere <strong>cle en main (&laquo; Ready-to-Deploy &raquo;)</strong>. L'equipe IT de l'usine n'a besoin d'installer aucune dependance logicielle locale (pas d'installation manuelle de Python, Node.js, PostgreSQL ou Redis). Deux scripts automatises couvrent l'integralite des architectures serveurs rencontrees en industrie :</p>
+  <h2>5.2 Deploiement reproductible du PoC</h2>
+  <p>L'un des atouts majeurs de la plateforme Smart-Truck-Tracker reside dans son <strong>deploiement entierement containerise et reproductible</strong>. L'equipe IT de l'usine n'a besoin d'installer aucune dependance logicielle locale (pas d'installation manuelle de Python, Node.js, PostgreSQL ou Redis). Deux scripts automatises couvrent les architectures serveurs usuelles. <em>Il est rappele que ce deploiement a ete valide en environnement de developpement ; un deploiement en production industrielle necessitera des etapes de validation complementaires (tests de charge, integration SAP, securisation reseau).</em> Deux scripts automatises couvrent l'integralite des architectures serveurs rencontrees en industrie :</p>
 
   <h3>Option 1 &mdash; Deploiement sur serveur d'usine Linux (Ubuntu / Debian / RHEL)</h3>
   <p>L'execution du script shell <code>deploy.sh</code> configure automatiquement les permissions, genere le fichier d'environnement <code>.env</code> en mode production reelle (<code>CV_MODE=real</code>), prepare les volumes persistants et lance les conteneurs en arriere-plan :</p>
